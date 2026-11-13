@@ -87,6 +87,26 @@ export async function saveApp(input: SaveAppInput, deps: GithubDeps): Promise<vo
   deps.identityCache.clear();
 }
 
+/**
+ * Forgets the App entirely: the row first (so nothing treats a half-removed App as usable), then its
+ * installations, secrets and the user token. The App itself stays on GitHub until deleted there.
+ */
+export async function removeApp(deps: GithubDeps): Promise<void> {
+  await deps.db.transaction(async (tx) => {
+    await tx.delete(githubApp);
+    await tx.delete(githubInstallations);
+  });
+  await Promise.all([
+    deps.secretStore.remove('github_app_private_key', APP_SECRET_REF),
+    deps.secretStore.remove('github_app_client_secret', APP_SECRET_REF),
+    deps.secretStore.remove('github_app_webhook_secret', APP_SECRET_REF),
+    deps.secretStore.remove('github_user_token', 'default'),
+  ]);
+  deps.tokenCache.clear();
+  deps.listCache.clear();
+  deps.identityCache.clear();
+}
+
 const appResponse = z.object({
   id: z.number().int(),
   slug: z.string().min(1),

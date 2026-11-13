@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { githubApp, githubInstallations, secrets } from '@/db/schema';
 import { beginManifestFlow, completeManifest } from '@/github/app-manifest';
 import { GITHUB_APP_PERMISSIONS, MissingPermissionsError } from '@/github/app-permissions';
-import { getApp, saveExistingApp } from '@/github/app-store';
+import { getApp, removeApp, saveExistingApp } from '@/github/app-store';
 import { handleManifestCallback, handleSetupCallback } from '@/github/callback-handlers';
 import { listInstallations, recordInstallation, syncInstallations } from '@/github/installations';
 import { NextRequest } from 'next/server';
@@ -161,6 +161,21 @@ describe('use an existing app', () => {
       await expect(saveExistingApp({ ...input, privateKey: ctx.keys.privatePem }, ctx.deps)).rejects.toThrow();
       await expect(saveExistingApp({ ...input, privateKey: 'not a key' }, ctx.deps)).rejects.toThrow();
       expect(await stored(ctx)).toEqual({ apps: [], secretKinds: [] });
+    });
+  });
+});
+
+describe('removeApp', () => {
+  it('forgets the app, its installations, its secrets and the user token', async () => {
+    await withGithub(async (ctx) => {
+      await seedApp(ctx);
+      await seedInstallation(ctx, 1, 'acme');
+      await ctx.secrets.put('github_user_token', 'default', '{}');
+      await ctx.secrets.put('repo', 'acme/widgets:API_KEY', 'kept');
+      await removeApp(ctx.deps);
+      expect(await getApp(ctx.deps)).toBeNull();
+      expect(await listInstallations(ctx.deps)).toEqual([]);
+      expect((await stored(ctx)).secretKinds).toEqual(['repo']);
     });
   });
 });

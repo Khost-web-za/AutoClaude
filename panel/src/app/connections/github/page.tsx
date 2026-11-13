@@ -3,7 +3,7 @@ import { Building2, ExternalLink, Plus, UserRound } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireOwner } from '@/auth/require-owner';
-import { authorizeGithubAsMe } from '@/connections/github-actions';
+import { authorizeGithubAsMe, disconnectGithubApp } from '@/connections/github-actions';
 import { GithubAppSetup } from '@/connections/github-app-setup';
 import { githubCallbackNotice } from '@/connections/github-notices';
 import { GithubSyncButton } from '@/connections/github-sync-button';
@@ -88,11 +88,18 @@ export default async function GithubConnectionPage({
           <div className="mb-8">
             <Banner
               tone="warning"
-              title={`Replacing ${app.slug}. Its installations and your "Authorize as me" token are forgotten once the new App is saved.`}
+              title={`Replacing ${app.slug}. Its installations and your "Authorize as me" token are forgotten once the new App is saved, or right away if you disconnect. Running sessions lose GitHub access.`}
               action={
-                <Link href="/connections/github" className={EXTERNAL}>
-                  Cancel
-                </Link>
+                <span className="flex items-center gap-4">
+                  <form action={disconnectGithubApp}>
+                    <Button type="submit" variant="danger" className="min-h-11">
+                      Disconnect
+                    </Button>
+                  </form>
+                  <Link href="/connections/github" className={EXTERNAL}>
+                    Cancel
+                  </Link>
+                </span>
               }
             />
           </div>
@@ -198,7 +205,7 @@ export default async function GithubConnectionPage({
               ]}
             />
             <Link href="/connections/github?replace=1" className={`${EXTERNAL} self-start text-sm`}>
-              Use a different App
+              Use a different App or disconnect
             </Link>
           </section>
           <IdentityRow mode={mode} />

@@ -9,7 +9,7 @@ import { formEntries, type FormState } from '@/feedback/form-state';
 import { parsePrivateKey } from '@/github/app-jwt';
 import { beginManifestFlow } from '@/github/app-manifest';
 import { MissingPermissionsError } from '@/github/app-permissions';
-import { GithubAppNotConfiguredError, saveExistingApp } from '@/github/app-store';
+import { GithubAppNotConfiguredError, removeApp, saveExistingApp } from '@/github/app-store';
 import { GithubApiError } from '@/github/github-api';
 import { sharedGithubDeps } from '@/github/github-deps';
 import { syncInstallations } from '@/github/installations';
@@ -111,6 +111,14 @@ export async function syncGithubInstallations(): Promise<SyncResult> {
   }
   revalidatePath('/', 'layout');
   return { ok: true, message: 'Installations synced.' };
+}
+
+/** "Disconnect": forgets the App, its installations and the user token, back to the setup screen. */
+export async function disconnectGithubApp(): Promise<void> {
+  await requireOwner();
+  await removeApp(sharedGithubDeps());
+  revalidatePath('/', 'layout');
+  redirect(`${PAGE}?disconnected=1`);
 }
 
 /** "Authorize as me": sets the state cookie and sends the browser to GitHub's consent screen. */

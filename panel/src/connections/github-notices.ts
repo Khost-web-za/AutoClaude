@@ -18,6 +18,9 @@ export function githubCallbackNotice(params: SearchParams): GithubNotice | null 
     return { tone: 'success', title: 'GitHub App created. Install it on an account to give it repositories.' };
   }
   if (first(params.installed) === '1') return { tone: 'success', title: 'Installation recorded.' };
+  if (first(params.disconnected) === '1') {
+    return { tone: 'success', title: 'GitHub App disconnected. It still exists on GitHub until you delete it there.' };
+  }
   if (first(params.authorized) === '1') return { tone: 'success', title: 'Authorized. New sessions open PRs as you.' };
   const error = first(params.error);
   return error && Object.hasOwn(ERRORS, error) ? ERRORS[error]! : null;
