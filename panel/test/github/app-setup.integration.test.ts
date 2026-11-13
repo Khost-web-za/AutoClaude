@@ -3,7 +3,7 @@ import { githubApp, githubInstallations, secrets } from '@/db/schema';
 import { beginManifestFlow, completeManifest } from '@/github/app-manifest';
 import { GITHUB_APP_PERMISSIONS, MissingPermissionsError } from '@/github/app-permissions';
 import { getApp, removeApp, saveExistingApp } from '@/github/app-store';
-import { handleManifestCallback, handleSetupCallback } from '@/github/callback-handlers';
+import { handleManifestCallback, handleManifestStart, handleSetupCallback } from '@/github/callback-handlers';
 import { listInstallations, recordInstallation, syncInstallations } from '@/github/installations';
 import { NextRequest } from 'next/server';
 import { PUBLIC_URL, seedApp, seedInstallation, withGithub, type GithubCtx } from './github-fixtures';
@@ -106,6 +106,35 @@ describe('manifest flow', () => {
       const replay = await handleManifestCallback(request(), ctx.deps);
       expect(replay.status).toBe(400);
       expect(ctx.stub.count('POST /app-manifests/abc123/conversions')).toBe(1);
+    });
+  });
+
+  it('the copyable start link answers a self-submitting form and a state cookie that completes the callback', async () => {
+    await withGithub(async (ctx) => {
+      const response = handleManifestStart({ organization: 'my-org', ownerHint: 'k' }, ctx.deps);
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('text/html');
+      const html = await response.text();
+      const action = /action="([^"]+)"/.exec(html)?.[1]?.replaceAll('&#38;', '&') ?? '';
+      expect(action).toContain(`${ctx.stub.url}/organizations/my-org/settings/apps/new?state=`);
+      // The manifest JSON is attribute-escaped, never raw quotes inside value="…".
+      const value = /name="manifest" value="([^"]*)"/.exec(html)?.[1] ?? '';
+      expect(value).toContain('&#34;hook_attributes&#34;');
+
+      const [pair] = (response.headers.get('set-cookie') ?? '').split(';');
+      const [name, cookieValue] = (pair ?? '').split('=');
+      ctx.stub.on('POST /app-manifests/abc123/conversions', conversion(ctx));
+      const done = await handleManifestCallback(
+        callbackRequest(
+          '/api/github/manifest/callback',
+          { code: 'abc123', state: new URL(action).searchParams.get('state') ?? '' },
+          { name: name!, value: cookieValue! },
+        ),
+        ctx.deps,
+      );
+      expect(done.headers.get('location')).toBe(`${PUBLIC_URL}/connections/github?connected=1`);
+
+      expect(handleManifestStart({ organization: '../evil', ownerHint: 'k' }, ctx.deps).status).toBe(400);
     });
   });
 

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { completeManifest } from './app-manifest';
+import { beginManifestFlow, completeManifest } from './app-manifest';
 import type { GithubDeps } from './github-deps';
 import { recordInstallation } from './installations';
 import { InvalidStateError, STATE_COOKIE_NAMES, type StatePurpose } from './oauth-state';
@@ -73,6 +73,43 @@ export async function handleOAuthStart(deps: GithubDeps): Promise<NextResponse> 
     console.error('[github] oauth start failed:', error instanceof Error ? error.name : 'error');
     return redirectTo(deps, 'error=authorize_failed');
   }
+}
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
+
+/**
+ * Starts "Create GitHub App" from a plain link, so it can be copied into another browser (one signed in to
+ * a different GitHub account). GitHub's manifest flow needs a POST, so this answers with a page that sets
+ * the state cookie in that browser and submits the manifest form itself.
+ */
+export function handleManifestStart(
+  input: { organization: string | null; ownerHint: string },
+  deps: GithubDeps,
+): NextResponse {
+  let flow: ReturnType<typeof beginManifestFlow>;
+  try {
+    flow = beginManifestFlow({ ownerHint: input.ownerHint, organization: input.organization || undefined }, deps);
+  } catch {
+    return text(400, 'Not a GitHub organization name');
+  }
+  const html = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opening GitHub…</title></head>
+<body style="font-family:system-ui,sans-serif;background:#0f0f0f;color:#e5e5e5;display:grid;place-items:center;min-height:100vh;margin:0">
+<form id="manifest" method="post" action="${escapeHtml(flow.postUrl)}">
+<input type="hidden" name="manifest" value="${escapeHtml(flow.manifest)}">
+<p>Opening GitHub to create the App…</p>
+<button type="submit">Continue to GitHub</button>
+</form>
+<script>document.getElementById('manifest').submit();</script>
+</body></html>`;
+  const response = new NextResponse(html, {
+    status: 200,
+    headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' },
+  });
+  response.cookies.set(flow.cookie.name, flow.cookie.value, flow.cookie.options);
+  return response;
 }
 
 /** GitHub sends the browser here after an installation; the id is confirmed against the API, not trusted. */

@@ -105,7 +105,7 @@ export default async function GithubConnectionPage({
             />
           </div>
         ) : null}
-        <GithubAppSetup />
+        <GithubAppSetup publicUrl={deps.publicUrl} />
       </>
     );
   }

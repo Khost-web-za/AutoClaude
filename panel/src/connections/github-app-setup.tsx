@@ -6,6 +6,7 @@ import { useActionState, useRef, useState, useTransition } from 'react';
 import { IDLE_FORM } from '@/feedback/form-state';
 import { submitWithoutReset } from '@/feedback/form-submit';
 import { withToast } from '@/feedback/toast-host';
+import { CopyLinkButton } from '@/ui/copy-link-button';
 import { SectionLabel } from '@/ui/section-label';
 import { beginGithubAppCreation, saveExistingGithubApp } from './github-actions';
 
@@ -13,12 +14,14 @@ import { beginGithubAppCreation, saveExistingGithubApp } from './github-actions'
  * "Create GitHub App" (GitHub's manifest flow): the server sets the state cookie, then the browser POSTs the
  * manifest to GitHub, which creates the App and redirects back to the manifest callback.
  */
-function CreateAppForm() {
+function CreateAppForm({ publicUrl }: { publicUrl: string }) {
   const [organization, setOrganization] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const postForm = useRef<HTMLFormElement>(null);
   const manifestInput = useRef<HTMLInputElement>(null);
+  const trimmed = organization.trim();
+  const createLink = `${publicUrl}/api/github/manifest/start${trimmed ? `?organization=${encodeURIComponent(trimmed)}` : ''}`;
 
   function create() {
     setError(null);
@@ -53,10 +56,17 @@ function CreateAppForm() {
           <Input placeholder="Leave empty for your personal account" maxLength={39} className="min-h-11" />
           <Description>Type an organization name to create the App under it instead.</Description>
         </TextField>
-        <Button type="submit" variant="primary" isPending={isPending} className="min-h-11 self-start">
-          <Wand2 aria-hidden className="size-4" />
-          Create GitHub App
-        </Button>
+        <div className="flex flex-wrap gap-3">
+          <Button type="submit" variant="primary" isPending={isPending} className="min-h-11">
+            <Wand2 aria-hidden className="size-4" />
+            Create GitHub App
+          </Button>
+          <CopyLinkButton url={createLink} label="Copy create link" />
+        </div>
+        <Description>
+          Signed in to the wrong GitHub account here? Open the copied link in a browser signed in to the right one
+          (it asks for your panel login there too).
+        </Description>
         {error ? (
           <p role="alert" className="text-sm text-danger">
             {error}
@@ -140,10 +150,10 @@ function ExistingAppForm() {
 }
 
 /** Shown while no App is configured: create one, or bring your own. */
-export function GithubAppSetup() {
+export function GithubAppSetup({ publicUrl }: { publicUrl: string }) {
   return (
     <div className="grid max-w-6xl gap-12 lg:grid-cols-2 lg:gap-16">
-      <CreateAppForm />
+      <CreateAppForm publicUrl={publicUrl} />
       <ExistingAppForm />
     </div>
   );
