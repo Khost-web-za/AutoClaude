@@ -1,0 +1,57 @@
+{
+  "name": "claudecloud-panel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "build:migrate": "esbuild src/db/migrate-cli.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/migrate.js --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "start": "next start --port 3000",
+    "typecheck": "next typegen && tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:integration": "vitest run -c vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node --env-file-if-exists=../.env.local --import tsx src/db/migrate-cli.ts"
+  },
+  "dependencies": {
+    "@heroui/react": "3.2.6",
+    "@heroui/styles": "3.2.6",
+    "dockerode": "^4.0.12",
+    "drizzle-orm": "^0.45.4",
+    "jose": "^6.2.17",
+    "lucide-react": "^1.0.0",
+    "next": "16.3.8",
+    "postgres": "^3.4.9",
+    "react": "19.3.0",
+    "react-aria-components": "1.21.1",
+    "react-dom": "19.3.0",
+    "server-only": "0.0.1",
+    "tar-stream": "3.2.2",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/dockerode": "^4.0.2",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/tar-stream": "^3.1.5",
+    "drizzle-kit": "^0.31.11",
+    "esbuild": "0.28.2",
+    "eslint": "10.11.0",
+    "eslint-config-next": "16.3.8",
+    "tailwindcss": "4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  }
+}

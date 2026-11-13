@@ -1,0 +1,15 @@
+{
+  "Id": "3f1c9a7d2b8e4c6f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f",
+  "Name": "/panel-x0k8s4c0gwsk0ow4cgcg8wkw-101530",
+  "Config": { "Hostname": "3f1c9a7d2b8e", "Labels": { "com.docker.compose.project": "x0k8s4c0gwsk0ow4cgcg8wkw" } },
+  "Mounts": [
+    { "Type": "bind", "Source": "/data/coolify/applications/x0k8s4c0gwsk0ow4cgcg8wkw/configs", "Destination": "/app/configs", "RW": false },
+    { "Type": "volume", "Name": "x0k8s4c0gwsk0ow4cgcg8wkw_claude-auth", "Source": "/var/lib/docker/volumes/x0k8s4c0gwsk0ow4cgcg8wkw_claude-auth/_data", "Destination": "/claude-auth", "RW": true }
+  ],
+  "NetworkSettings": {
+    "Networks": {
+      "coolify": { "Aliases": ["panel-x0k8s4c0gwsk0ow4cgcg8wkw-101530"] },
+      "x0k8s4c0gwsk0ow4cgcg8wkw": { "Aliases": ["panel", "3f1c9a7d2b8e"] }
+    }
+  }
+}

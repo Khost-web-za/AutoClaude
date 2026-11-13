@@ -1,0 +1,38 @@
+# env / secrets
+.env*
+!.env.example
+
+# IDE
+.idea/
+
+# build / deps
+node_modules/
+.next/
+dist/
+
+# local docker overrides
+docker-compose.override*.yml
+
+# spike credentials (never commit)
+runner/spike/auth/
+
+# superpowers execution scratch
+.superpowers/
+
+# throwaway spike scratch
+spike/
+
+# panel
+panel/.next/
+panel/test-results/
+panel/*.tsbuildinfo
+panel/playwright-report/
+
+# keys / certs / local tooling
+*.pem
+*.key
+*.p12
+.vscode/
+.claude/settings.local.json
+.DS_Store
+*.log

@@ -1,0 +1,20 @@
+# Local dev/test stack. Never used in production (Coolify deploys its own compose file).
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: claudecloud
+      POSTGRES_PASSWORD: claudecloud
+      POSTGRES_DB: claudecloud
+    ports:
+      - '127.0.0.1:55430:5432'
+    volumes:
+      - claudecloud-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U claudecloud -d claudecloud']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  claudecloud-pgdata:

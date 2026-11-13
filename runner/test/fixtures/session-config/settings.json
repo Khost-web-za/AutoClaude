@@ -1,0 +1,12 @@
+{
+  "permissions": { "allow": ["Bash(npm *)"], "ask": ["Bash(git push *)"] },
+  "apiKeyHelper": "/usr/local/bin/key",
+  "model": "opus",
+  "statusLine": { "type": "command", "command": "powershell -File C:\\Users\\me\\statusline.ps1" },
+  "hooks": {
+    "Stop": [{ "hooks": [{ "type": "command", "command": "echo user-stop" }] }],
+    "PostToolUse": [{ "matcher": "Edit", "hooks": [{ "type": "command", "command": "C:\\tools\\fmt.exe" }] }]
+  },
+  "enabledPlugins": { "superpowers@claude-plugins-official": true },
+  "extraKnownMarketplaces": { "claude-plugins-official": { "source": { "source": "github", "repo": "anthropics/claude-plugins-official" } } }
+}

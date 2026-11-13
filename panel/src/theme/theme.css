@@ -1,0 +1,81 @@
+/*
+ * claudecloud panel theme. Imported after `@heroui/styles`, so these override HeroUI's dark theme.
+ * Source of truth for colours and fonts. Dark only.
+ */
+@layer base {
+  .dark,
+  [data-theme='dark'] {
+    color-scheme: dark;
+    --background: #101010;
+    --foreground: #ffffff;
+    --surface: #1b1b1b;
+    --surface-foreground: #e5e7eb;
+    --surface-secondary: #242424;
+    --surface-tertiary: #2c2c2c;
+    --overlay: #1b1b1b;
+    --overlay-foreground: #e5e7eb;
+    --muted: #a1a1aa;
+    --default: #242424;
+    --default-foreground: #e5e7eb;
+    --accent: #22c55e;
+    --accent-foreground: #03140a;
+    --success: #22c55e;
+    --warning: #eab308;
+    --danger: #ef4444;
+    --border: rgb(255 255 255 / 0.07);
+    --separator: rgb(255 255 255 / 0.07);
+    --focus: #22c55e;
+    --link: #4ade80;
+    --backdrop: rgb(0 0 0 / 0.6);
+    --field-background: rgb(255 255 255 / 0.04);
+    --field-hover: rgb(255 255 255 / 0.06);
+    --field-focus: rgb(255 255 255 / 0.04);
+    --field-foreground: #ffffff;
+    --field-placeholder: #71717a;
+    --field-border: rgb(255 255 255 / 0.07);
+    --field-border-hover: rgb(255 255 255 / 0.12);
+    --field-border-focus: var(--focus);
+    --field-shadow: 0 0 0 0 transparent inset;
+  }
+}
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-fira-code), ui-monospace, monospace;
+  --color-sidebar: #141414;
+  --color-footer: #0b0b0b;
+  --color-text-subtle: #71717a;
+  --color-accent-soft: rgb(34 197 94 / 0.15);
+  --color-accent-text: #4ade80;
+  --color-on-accent: #03140a;
+  --color-status-working: #22c55e;
+  --color-status-waiting: #eab308;
+  --color-status-starting: #38bdf8;
+  --color-status-failed: #ef4444;
+  --color-status-stopped: #6b7280;
+  --shadow-status-working: 0 0 8px 1px rgb(34 197 94 / 0.55);
+}
+
+@layer components {
+  .button {
+    border-radius: var(--radius-md);
+    font-weight: 600;
+  }
+  .button--primary {
+    --button-bg: #22c55e;
+    --button-bg-hover: #16a34a;
+    --button-bg-pressed: #16a34a;
+    --button-fg: #03140a;
+  }
+  .button--danger {
+    --button-bg: #b91c1c;
+    --button-bg-hover: #991b1b;
+    --button-bg-pressed: #991b1b;
+    --button-fg: #fff;
+  }
+  .chip {
+    border-radius: 9999px;
+    font-weight: 600;
+  }
+}

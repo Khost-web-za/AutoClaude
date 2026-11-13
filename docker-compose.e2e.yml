@@ -1,0 +1,105 @@
+# End-to-end stack: docker-compose.yml's services, run locally for the Playwright smoke test
+# (panel/e2e/smoke.spec.ts). Production build of the panel (NODE_ENV=production, no dev bypass), with
+# everything outside the stack replaced by panel/e2e/stub (Access JWKS, GitHub API, a bare git repo).
+#   docker compose -f docker-compose.e2e.yml up -d --build --wait
+#   pnpm --dir panel test:e2e
+#   docker compose -f docker-compose.e2e.yml down -v
+# Differences from production: SESSION_RUNTIME=runc (no Sysbox), the runner image runs a stub instead
+# of the claude CLI, fixed test-only credentials, and the panel/stub are published on 127.0.0.1 only.
+# Session containers the panel starts are not part of this project; the smoke test deletes its own.
+name: claudecloud-e2e
+
+services:
+  runner:
+    build:
+      context: ./runner
+      args:
+        CLAUDE_BIN: /opt/runner/test/stub-claude.sh
+    image: claudecloud-runner:e2e
+    entrypoint: ['true']
+    restart: 'no'
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: claudecloud
+      POSTGRES_PASSWORD: e2e
+      POSTGRES_DB: claudecloud
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U claudecloud -d claudecloud']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.1
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      EXEC: 1
+      INFO: 1
+      POST: 1
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      ALLOW_RESTARTS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-api]
+
+  hoststats:
+    build: { context: ./hoststats }
+    volumes:
+      - /proc:/host/proc:ro
+      - /var/lib/docker:/host/docker:ro
+
+  stub:
+    build: { context: ./panel/e2e/stub }
+    ports:
+      - '127.0.0.1:3311:8080'
+    # Stands in for the internet (GitHub git): sessions must reach it, so it is also on `sessions`.
+    networks: [default, sessions]
+
+  panel:
+    build: { context: ., dockerfile: panel/Dockerfile }
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://claudecloud:e2e@postgres:5432/claudecloud
+      # Test-only key; never used anywhere else.
+      PANEL_ENCRYPTION_KEY: eH+5y8hF8z8e5Jd5dex/HlROTTfB2P02uAV1iCU7pj4=
+      PANEL_PUBLIC_URL: http://127.0.0.1:3310
+      RUNNER_IMAGE: claudecloud-runner:e2e
+      ALLOWED_EMAIL: owner@example.com
+      CF_ACCESS_TEAM_DOMAIN: e2e.cloudflareaccess.com
+      CF_ACCESS_AUD: claudecloud-e2e
+      CF_ACCESS_JWKS_URL: http://stub:8080/cdn-cgi/access/certs
+      GITHUB_API_URL: http://stub:8080/api
+      SESSION_REPO_URL_TEMPLATE: http://stub:8080/git/{owner}/{name}.git
+      SESSION_RUNTIME: runc
+      # Fixture profiles: base without plugins (no network installs during boot) + example.
+      CONFIGS_DIR: /e2e/configs
+    volumes:
+      - claude-auth:/claude-auth
+      - ./panel/e2e/fixtures/configs:/e2e/configs:ro
+    ports:
+      - '127.0.0.1:3310:3000'
+    networks: [default, docker-api, sessions]
+    depends_on:
+      postgres: { condition: service_healthy }
+      runner: { condition: service_completed_successfully }
+      docker-proxy: { condition: service_started }
+      stub: { condition: service_healthy }
+    # Healthcheck: the image's HEALTHCHECK (panel/Dockerfile).
+
+networks:
+  docker-api:
+    internal: true
+  # As in production: session containers join this one, which holds only the panel.
+  sessions: {}
+
+volumes:
+  postgres-data:
+  claude-auth:

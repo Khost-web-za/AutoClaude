@@ -1,0 +1,124 @@
+# Production stack for Coolify ("Docker Compose" build pack, this file at the repo root). One stack is
+# the whole product: it builds the runner image, starts Postgres, the Docker socket proxy, the host
+# stats sidecar and the panel. Nothing else is deployed, and there is no registry.
+#
+# Coolify generates and keeps these magic variables at deploy time (do not set them yourself):
+#   SERVICE_FQDN_PANEL_3000   the panel's public domain, routed to port 3000 (the only published port)
+#   SERVICE_URL_PANEL         https://<that domain>, given to the panel as PANEL_PUBLIC_URL
+#   SERVICE_PASSWORD_POSTGRES the Postgres password
+#   SERVICE_REALBASE64_ENCRYPTION  base64 of 32 random bytes → PANEL_ENCRYPTION_KEY (which must decode to
+#                             exactly 32 bytes). Not SERVICE_BASE64_*: despite the name, Coolify makes that a
+#                             32-character alphanumeric string, which is not a 32-byte key. Losing this value
+#                             loses every stored secret (Claude login backup, GitHub App key, repo secrets).
+#   SOURCE_COMMIT             the deployed commit; tags the runner image. Coolify withholds it from builds by
+#                             default: set Advanced > Build > "Source commit availability" to "Available
+#                             during build", otherwise every deploy re-tags claudecloud-runner:local (sessions
+#                             still use the fresh build, but no image is kept per commit).
+#
+# Set these in the Coolify UI (required; the deploy refuses to start without them):
+#   ALLOWED_EMAIL             the one owner, matched case-insensitively against the Access token email
+#   CF_ACCESS_TEAM_DOMAIN     e.g. myteam.cloudflareaccess.com
+#   CF_ACCESS_AUD             the Cloudflare Access application's AUD tag
+# Optional: SESSION_RUNTIME (default sysbox-runc), STACK_NETWORK and CLAUDE_AUTH_VOLUME (only if the
+# panel cannot discover its own network/volume through Docker), GITHUB_API_URL (GitHub Enterprise).
+#
+# Host prerequisite: the Sysbox runtime (docs/vps-setup.md). Without it the panel shows a banner and
+# sessions refuse to start. GitHub and Claude are connected in the panel UI after the first deploy.
+#
+# Networks. Session containers join only `sessions`, which holds nothing but the panel (they need the runner
+# API, panel:3100, and nothing else in the stack). The panel finds it by its compose label
+# (com.docker.compose.network=sessions in its own project) and refuses to start a session on any network
+# that also holds docker-proxy, a docker.sock mount or postgres, whatever Coolify attaches where.
+# Internal only, never published and never given a SERVICE_FQDN: the runner API (:3100), the Docker API
+# proxy (docker-proxy:2375, on the internal `docker-api` network with the panel) and hoststats (:9100).
+
+services:
+  # Build-only: builds and tags the session image the panel launches; the container exits at once.
+  # `entrypoint` (not `command`) is overridden: the image's entrypoint would boot a real session.
+  runner:
+    build: { context: ./runner }
+    image: claudecloud-runner:${SOURCE_COMMIT:-local}
+    entrypoint: ['true']
+    restart: 'no'
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: claudecloud
+      POSTGRES_PASSWORD: ${SERVICE_PASSWORD_POSTGRES}
+      POSTGRES_DB: claudecloud
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U claudecloud -d claudecloud']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # The panel's only way to Docker: a filtered API, no ports, read-only socket mount.
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:v0.4.1
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      EXEC: 1
+      INFO: 1
+      POST: 1
+      ALLOW_START: 1
+      ALLOW_STOP: 1
+      ALLOW_RESTARTS: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker-api]
+    restart: unless-stopped
+
+  # Host free disk / CPU / memory for the footer and the Start disk check. Read-only, no socket, no ports.
+  hoststats:
+    build: { context: ./hoststats }
+    volumes:
+      - /proc:/host/proc:ro
+      - /var/lib/docker:/host/docker:ro
+    restart: unless-stopped
+
+  panel:
+    build: { context: ., dockerfile: panel/Dockerfile }
+    environment:
+      DATABASE_URL: postgres://claudecloud:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/claudecloud
+      PANEL_ENCRYPTION_KEY: ${SERVICE_REALBASE64_ENCRYPTION}
+      PANEL_PUBLIC_URL: ${SERVICE_URL_PANEL}
+      SERVICE_FQDN_PANEL_3000: ''
+      RUNNER_IMAGE: claudecloud-runner:${SOURCE_COMMIT:-local}
+      ALLOWED_EMAIL: ${ALLOWED_EMAIL:?set ALLOWED_EMAIL to the owner's email}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:?set CF_ACCESS_TEAM_DOMAIN, e.g. myteam.cloudflareaccess.com}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:?set CF_ACCESS_AUD to the Access application AUD tag}
+      SESSION_RUNTIME: ${SESSION_RUNTIME:-sysbox-runc}
+      GITHUB_API_URL: ${GITHUB_API_URL:-}
+      STACK_NETWORK: ${STACK_NETWORK:-}
+      CLAUDE_AUTH_VOLUME: ${CLAUDE_AUTH_VOLUME:-}
+      # DOCKER_HOST (tcp://docker-proxy:2375), HOSTSTATS_URL (http://hoststats:9100), RUNNER_API_PORT
+      # (3100) and CONFIGS_DIR (/app/configs) keep their built-in defaults.
+    volumes:
+      # The live Claude login, shared with every session container (found by self-discovery).
+      - claude-auth:/claude-auth
+    # default: postgres and hoststats. docker-api: the socket proxy. sessions: session containers only.
+    networks: [default, docker-api, sessions]
+    depends_on:
+      postgres: { condition: service_healthy }
+      runner: { condition: service_completed_successfully }
+      docker-proxy: { condition: service_started }
+    # Healthcheck: the image's HEALTHCHECK (panel/Dockerfile), the single source.
+    restart: unless-stopped
+
+networks:
+  # Only the panel and the socket proxy. Internal: no route out, and session containers never join it.
+  docker-api:
+    internal: true
+  # Only the panel and session containers. Not internal: sessions need the internet (GitHub, Claude).
+  sessions: {}
+
+volumes:
+  postgres-data:
+  claude-auth:

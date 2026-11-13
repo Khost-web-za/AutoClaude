@@ -1,0 +1,13 @@
+# Ignore rules for panel/Dockerfile (build context: repo root). Only panel/ and configs/ are needed.
+*
+!panel/
+!configs/
+**/node_modules
+**/.next
+**/.env*
+panel/dist
+panel/test-results
+panel/playwright-report
+panel/blob-report
+panel/*.tsbuildinfo
+panel/e2e
