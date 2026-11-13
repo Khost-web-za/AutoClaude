@@ -82,9 +82,8 @@ const escapeHtml = (value: string) =>
 /**
  * Starts "Create GitHub App" from a plain link, so it can be copied into another browser (one signed in to
  * a different GitHub account). GitHub's manifest flow needs a POST, so this answers with a page that sets
- * the state cookie in that browser and holds the manifest form. It does not auto-submit: if GitHub has to
- * sign the browser in (or pick an account) first, it drops the POST body and reports `"url" wasn't
- * supplied`, so the page asks to sign in to the right account before continuing.
+ * the state cookie in that browser and holds the manifest form. It waits for "Continue to GitHub" so the
+ * right GitHub account can be signed in first: the App is created on whichever account GitHub has active.
  */
 export function handleManifestStart(
   input: { organization: string | null; ownerHint: string },
@@ -103,7 +102,7 @@ export function handleManifestStart(
 <form method="post" action="${escapeHtml(flow.postUrl)}" style="max-width:28rem;display:flex;flex-direction:column;gap:16px">
 <input type="hidden" name="manifest" value="${escapeHtml(flow.manifest)}">
 <h1 style="font-size:1.25rem;margin:0">Create the GitHub App</h1>
-<p style="margin:0;line-height:1.5">First make sure this browser is signed in to github.com with the account that should own the App${input.organization ? ` (or an owner of <strong>${escapeHtml(input.organization)}</strong>)` : ''}. GitHub loses the App details if it has to sign you in on the way.</p>
+<p style="margin:0;line-height:1.5">First make sure this browser is signed in to github.com with the account that should own the App${input.organization ? ` (or an owner of <strong>${escapeHtml(input.organization)}</strong>)` : ''}. GitHub creates the App on whichever account is active.</p>
 <p style="margin:0"><a href="${escapeHtml(`${githubWebUrl(deps.apiUrl)}/login`)}" target="_blank" rel="noreferrer" style="color:#4ade80">Sign in to GitHub in a new tab</a>, then come back here.</p>
 <button type="submit" style="min-height:44px;padding:0 20px;border:0;border-radius:12px;background:#22c55e;color:#04140a;font-weight:700;font-size:1rem;cursor:pointer;align-self:flex-start">Continue to GitHub</button>
 <p style="margin:0;font-size:.875rem;color:#a3a3a3">This page is good for 10 minutes. Reload it to start over.</p>

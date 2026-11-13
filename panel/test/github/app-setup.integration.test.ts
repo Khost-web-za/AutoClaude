@@ -43,7 +43,11 @@ describe('manifest flow', () => {
       const flow = beginManifestFlow({ ownerHint: 'octocat' }, ctx.deps);
       expect(flow.postUrl.startsWith(`${ctx.stub.url}/settings/apps/new?state=`)).toBe(true);
       expect(new URL(flow.postUrl).searchParams.get('state')).toBe(flow.state);
-      expect(JSON.parse(flow.manifest)).toMatchObject({ hook_attributes: { active: false } });
+      // GitHub requires hook_attributes.url even with the webhook off; without it: '"url" wasn't supplied'.
+      expect(JSON.parse(flow.manifest)).toMatchObject({
+        url: PUBLIC_URL,
+        hook_attributes: { url: `${PUBLIC_URL}/api/github/webhook`, active: false },
+      });
       expect(flow.cookie.options.httpOnly).toBe(true);
 
       const org = beginManifestFlow({ ownerHint: 'k', organization: 'my-org' }, ctx.deps);

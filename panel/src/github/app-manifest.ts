@@ -23,7 +23,9 @@ export function buildManifest(publicUrl: string, ownerHint: string): object {
     callback_urls: [`${base}/api/github/oauth/callback`],
     request_oauth_on_install: false,
     public: false,
-    hook_attributes: { active: false },
+    // GitHub rejects hook_attributes without a url ('"url" wasn't supplied') even when inactive. Inactive
+    // means GitHub never calls it; the panel has no webhook route.
+    hook_attributes: { url: `${base}/api/github/webhook`, active: false },
     default_permissions: { ...GITHUB_APP_PERMISSIONS },
   };
 }

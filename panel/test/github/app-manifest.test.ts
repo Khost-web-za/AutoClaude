@@ -18,7 +18,8 @@ describe('buildManifest', () => {
       callback_urls: ['https://claude.example.com/api/github/oauth/callback'],
       request_oauth_on_install: false,
       public: false,
-      hook_attributes: { active: false },
+      // GitHub refuses hook_attributes without a url, even inactive ('"url" wasn't supplied').
+      hook_attributes: { url: 'https://claude.example.com/api/github/webhook', active: false },
       default_permissions: {
         contents: 'write',
         pull_requests: 'write',
