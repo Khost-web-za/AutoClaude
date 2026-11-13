@@ -26,20 +26,16 @@ Each session uses your Claude subscription and GitHub App. Everything is stored 
 - A Claude Pro, Max or Ultra subscription
 - A GitHub account (and any organizations whose repositories you want sessions to use)
 
-## 4. Make your private copy
+## 4. Choose what to deploy
 
-Make a private copy of this repository, not a GitHub fork. A fork of a public repository must stay public, and your copy will hold your own profiles and settings.
+No fork or private copy is needed. Coolify deploys this public repository directly:
 
-```bash
-git clone https://github.com/Khost-web-za/AutoClaude.git claudecloud
-cd claudecloud
-git remote rename origin upstream
-# create an empty PRIVATE repository on GitHub, then:
-git remote add origin git@github.com:<you>/claudecloud.git
-git push -u origin main
-```
+| Branch | Use |
+|---|---|
+| `live` | The stable release. Deploy this one. |
+| `main` | Ongoing development. It can be ahead of `live` and is not guaranteed stable. |
 
-`upstream` is where updates come from (see [Updating](#10-updating-and-redeploying)). Your own profiles and settings live in your copy.
+Everything personal lives outside the repository: your email and Cloudflare values are Coolify environment variables, and Claude, GitHub and repo secrets are connected in the panel.
 
 ## 5. Install Sysbox
 
@@ -47,8 +43,8 @@ Follow [`docs/vps-setup.md`](docs/vps-setup.md) and run `bash runner/scripts/ver
 
 ## 6. Deploy on Coolify
 
-1. In Coolify: **Add resource**, pick your private repository, and choose the **Docker Compose** build pack. Leave the compose file at the repo root (`docker-compose.yml`).
-2. Set these environment variables in the Coolify UI. The deploy refuses to start without them.
+1. In Coolify: **Add resource** > **Public Repository**, enter `https://github.com/Khost-web-za/AutoClaude`, set the branch to `live`, and choose the **Docker Compose** build pack. Leave the compose file at the repo root (`docker-compose.yml`).
+2. Set these in the resource's **Environment Variables** tab, not by editing the compose file (a redeploy would overwrite edits). The deploy refuses to start without them.
 
    | Variable | Value |
    |---|---|
@@ -109,13 +105,13 @@ Keep `base` mostly as it is, because that is the only place upstream updates can
 
 ## 10. Updating and redeploying
 
-```bash
-git fetch upstream
-git pull upstream main
-git push origin main        # then redeploy in Coolify
-```
+Redeploy in Coolify to pick up the latest `live` (or turn on auto-deploy for the resource). Database migrations run automatically when the panel container starts, and a failed migration stops it before it serves anything. Running sessions keep the image and config they started with. New sessions use the new ones.
 
-Upstream does not touch your own profile folders, so merges stay clean. Database migrations run automatically when the panel container starts, and a failed migration stops it before it serves anything. Running sessions keep the image and config they started with. New sessions use the new ones.
+Maintainers release by merging `main` into `live`:
+
+```bash
+git switch live && git merge --ff-only main && git push origin live
+```
 
 ## 11. Local development
 
