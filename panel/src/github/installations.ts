@@ -11,12 +11,14 @@ export type InstallationRow = typeof githubInstallations.$inferSelect;
 const installationResponse = z.object({
   id: z.number().int().positive(),
   account: z.object({ login: z.string().min(1), type: z.string().min(1) }),
+  permissions: z.record(z.string(), z.string()).default({}),
 });
 
 const toRow = (installation: z.infer<typeof installationResponse>) => ({
   installationId: installation.id,
   accountLogin: installation.account.login,
   accountType: installation.account.type,
+  permissions: installation.permissions,
 });
 
 /** Records an installation after GitHub confirms, with the app JWT, that it belongs to this App. */
@@ -31,7 +33,7 @@ export async function recordInstallation(installationId: number, deps: GithubDep
     .values(row)
     .onConflictDoUpdate({
       target: githubInstallations.installationId,
-      set: { accountLogin: row.accountLogin, accountType: row.accountType },
+      set: { accountLogin: row.accountLogin, accountType: row.accountType, permissions: row.permissions },
     });
 }
 
@@ -79,6 +81,7 @@ export async function syncInstallations(deps: GithubDeps): Promise<void> {
           set: {
             accountLogin: sql`excluded.account_login`,
             accountType: sql`excluded.account_type`,
+            permissions: sql`excluded.permissions`,
           },
         });
     }

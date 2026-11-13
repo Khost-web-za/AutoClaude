@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { db as sharedDb, type Db } from '@/db/client';
 import { sessionEvents, sessions } from '@/db/schema';
 import { getPanelEnv } from '@/env/panel-env';
+import { GithubApiError } from '@/github/github-api';
+import { NoInstallationError } from '@/github/tokens';
 import { eventBus } from '@/live/event-bus';
 import { secretStore as sharedSecretStore, type SecretStore } from '@/secret-store/secret-store';
 import { nextStatus, redactEventData, type RunnerEvent } from '@/sessions/session-status';
@@ -157,7 +159,12 @@ export function createRunnerApiServer(deps: RunnerApiDeps): http.Server {
     try {
       credential = await mintGitCredential(session.repoFullName);
     } catch (error) {
-      console.error('[runner-api] git credential unavailable:', error instanceof Error ? error.name : 'error');
+      // GithubApiError / NoInstallationError messages carry GitHub's reason and never a token.
+      const known = error instanceof GithubApiError || error instanceof NoInstallationError;
+      console.error(
+        `[runner-api] git credential unavailable for ${session.repoFullName}:`,
+        known ? error.message : error instanceof Error ? error.name : 'error',
+      );
       return sendJson(res, 502, { error: 'git credential unavailable' });
     }
     return sendJson(res, 200, credential);

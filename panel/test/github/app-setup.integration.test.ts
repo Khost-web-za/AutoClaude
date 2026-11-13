@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { githubApp, githubInstallations, secrets } from '@/db/schema';
 import { beginManifestFlow, completeManifest } from '@/github/app-manifest';
+import { GITHUB_APP_PERMISSIONS, MissingPermissionsError } from '@/github/app-permissions';
 import { getApp, saveExistingApp } from '@/github/app-store';
 import { handleManifestCallback, handleSetupCallback } from '@/github/callback-handlers';
 import { listInstallations, recordInstallation, syncInstallations } from '@/github/installations';
@@ -118,13 +119,15 @@ describe('manifest flow', () => {
   });
 });
 
+const existingApp = { id: 77, slug: 'mine', html_url: 'https://github.com/apps/mine', owner: { login: 'octocat' } };
+
 describe('use an existing app', () => {
   it('verifies the key against GET /app with a signed JWT and stores the secrets', async () => {
     await withGithub(async (ctx) => {
       let claims: Record<string, unknown> = {};
       ctx.stub.on('GET /app', async (req) => {
         claims = (await verifyAppJwt(ctx.keys, req.headers.authorization)).payload;
-        return { json: { id: 77, slug: 'mine', html_url: 'https://github.com/apps/mine', owner: { login: 'octocat' } } };
+        return { json: { ...existingApp, permissions: { ...GITHUB_APP_PERMISSIONS, issues: 'read' } } };
       });
       await saveExistingApp(
         { appId: 77, slug: 'mine', clientId: 'Iv1.x', clientSecret: 'cs', privateKey: ctx.keys.privatePem },
@@ -133,6 +136,21 @@ describe('use an existing app', () => {
       expect(claims.iss).toBe('77');
       expect(await getApp(ctx.deps)).toMatchObject({ appId: 77, slug: 'mine', ownerLogin: 'octocat' });
       expect(await ctx.secrets.get('github_app_private_key', 'app')).toBe(ctx.keys.privatePem);
+    });
+  });
+
+  it('refuses an App without the permissions sessions need (e.g. a deploy App), storing nothing', async () => {
+    await withGithub(async (ctx) => {
+      ctx.stub.on('GET /app', {
+        json: { ...existingApp, permissions: { contents: 'read', metadata: 'read', pull_requests: 'write' } },
+      });
+      const error = await saveExistingApp(
+        { appId: 77, slug: 'mine', clientId: 'Iv1.x', clientSecret: 'cs', privateKey: ctx.keys.privatePem },
+        ctx.deps,
+      ).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(MissingPermissionsError);
+      expect((error as MissingPermissionsError).missing).toEqual(['contents: write', 'workflows: write']);
+      expect(await stored(ctx)).toEqual({ apps: [], secretKinds: [] });
     });
   });
 
@@ -153,11 +171,13 @@ describe('installations', () => {
       await seedApp(ctx);
       ctx.stub.on('GET /app/installations/99', async (req) => {
         await verifyAppJwt(ctx.keys, req.headers.authorization);
-        return { json: { id: 99, account: { login: 'Acme', type: 'Organization' } } };
+        return {
+          json: { id: 99, account: { login: 'Acme', type: 'Organization' }, permissions: { contents: 'read' } },
+        };
       });
       await recordInstallation(99, ctx.deps);
       expect(await listInstallations(ctx.deps)).toMatchObject([
-        { installationId: 99, accountLogin: 'Acme', accountType: 'Organization' },
+        { installationId: 99, accountLogin: 'Acme', accountType: 'Organization', permissions: { contents: 'read' } },
       ]);
       await expect(recordInstallation(100, ctx.deps)).rejects.toThrow();
     });
@@ -172,13 +192,16 @@ describe('installations', () => {
         const page = req.query.get('page') ?? '1';
         return page === '1'
           ? { json: page1, headers: { link: `<${ctx.stub.url}/app/installations?per_page=100&page=2>; rel="next", <${ctx.stub.url}/app/installations?per_page=100&page=2>; rel="last"` } }
-          : { json: [{ id: 5, account: { login: 'last', type: 'Organization' } }] };
+          : { json: [{ id: 5, account: { login: 'last', type: 'Organization' }, permissions: { workflows: 'write' } }] };
       });
       await syncInstallations(ctx.deps);
       const all = await listInstallations(ctx.deps);
       expect(all).toHaveLength(101);
       expect(all.some((i) => i.accountLogin === 'gone')).toBe(false);
-      expect(all.find((i) => i.installationId === 5)?.accountType).toBe('Organization');
+      expect(all.find((i) => i.installationId === 5)).toMatchObject({
+        accountType: 'Organization',
+        permissions: { workflows: 'write' },
+      });
       expect((await ctx.deps.db.select().from(githubInstallations)).length).toBe(101);
     });
   });

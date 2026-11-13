@@ -8,6 +8,7 @@ import { requireOwner } from '@/auth/require-owner';
 import { formEntries, type FormState } from '@/feedback/form-state';
 import { parsePrivateKey } from '@/github/app-jwt';
 import { beginManifestFlow } from '@/github/app-manifest';
+import { MissingPermissionsError } from '@/github/app-permissions';
 import { GithubAppNotConfiguredError, saveExistingApp } from '@/github/app-store';
 import { GithubApiError } from '@/github/github-api';
 import { sharedGithubDeps } from '@/github/github-deps';
@@ -50,6 +51,9 @@ async function setStateCookie(cookie: StateCookie): Promise<void> {
 function githubFailure(error: unknown, action: string): string {
   console.error(`[github] ${action} failed:`, error instanceof Error ? error.name : 'error');
   if (error instanceof GithubAppNotConfiguredError) return 'No GitHub App is configured yet.';
+  if (error instanceof MissingPermissionsError) {
+    return `This App cannot run sessions. It needs ${error.missing.join(', ')}. Add them in the App's settings, or use Create GitHub App instead.`;
+  }
   if (error instanceof GithubApiError) return `GitHub refused the request (${error.status}).`;
   return 'GitHub could not be reached. Try again.';
 }

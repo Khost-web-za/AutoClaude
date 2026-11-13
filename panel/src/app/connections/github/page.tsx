@@ -1,18 +1,21 @@
 import { Button, buttonVariants } from '@heroui/react';
 import { Building2, ExternalLink, Plus, UserRound } from 'lucide-react';
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { requireOwner } from '@/auth/require-owner';
 import { authorizeGithubAsMe } from '@/connections/github-actions';
 import { GithubAppSetup } from '@/connections/github-app-setup';
 import { githubCallbackNotice } from '@/connections/github-notices';
 import { GithubSyncButton } from '@/connections/github-sync-button';
 import { parsePageParam } from '@/db/pagination';
+import { missingPermissions } from '@/github/app-permissions';
 import { getApp } from '@/github/app-store';
 import { githubWebUrl } from '@/github/github-api';
 import { sharedGithubDeps } from '@/github/github-deps';
 import { listInstallationsPage, type InstallationRow } from '@/github/installations';
 import { githubIdentityMode } from '@/github/tokens';
 import { Banner } from '@/ui/banner';
+import { CopyLinkButton } from '@/ui/copy-link-button';
 import { FactsList } from '@/ui/facts-list';
 import { PageLinks } from '@/ui/page-links';
 import { SectionLabel } from '@/ui/section-label';
@@ -76,36 +79,60 @@ export default async function GithubConnectionPage({
     </div>
   ) : null;
 
-  if (!app) {
+  // `?replace=1` reopens setup: saving a different App forgets the old one's installations and user token.
+  if (!app || params.replace === '1') {
     return (
       <>
         {noticeBanner}
+        {app ? (
+          <div className="mb-8">
+            <Banner
+              tone="warning"
+              title={`Replacing ${app.slug}. Its installations and your "Authorize as me" token are forgotten once the new App is saved.`}
+              action={
+                <Link href="/connections/github" className={EXTERNAL}>
+                  Cancel
+                </Link>
+              }
+            />
+          </div>
+        ) : null}
         <GithubAppSetup />
       </>
     );
   }
 
   const web = githubWebUrl(deps.apiUrl);
+  const installUrl = `${web}/apps/${encodeURIComponent(app.slug)}/installations/new`;
   const [installations, mode] = await Promise.all([
     listInstallationsPage(parsePageParam(params.page), deps),
     githubIdentityMode(deps),
   ]);
+  const lacking = installations.items.filter(
+    (installation) => installation.permissions && missingPermissions(installation.permissions).length > 0,
+  );
 
   return (
     <>
       {noticeBanner}
+      {lacking.length > 0 ? (
+        <div className="mb-8">
+          <Banner
+            tone="warning"
+            title={`Sessions cannot push on ${lacking.map((i) => i.accountLogin).join(', ')}: the App lacks permissions they need. Accept pending permission requests in the installation settings, or create a new App with Create GitHub App.`}
+          />
+        </div>
+      ) : null}
       <div className="grid max-w-6xl gap-12 lg:grid-cols-[1.25fr_1fr] lg:gap-16">
         <section className="flex flex-col gap-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <SectionLabel>Installed on</SectionLabel>
             <div className="flex flex-wrap gap-3">
-              <a
-                href={`${web}/apps/${encodeURIComponent(app.slug)}/installations/new`}
-                className={buttonVariants({ variant: 'primary', className: 'min-h-11' })}
-              >
+              <a href={installUrl} className={buttonVariants({ variant: 'primary', className: 'min-h-11' })}>
                 <Plus aria-hidden className="size-4" />
                 Install on an account
               </a>
+              <CopyLinkButton url={installUrl} label="Copy install link" />
               <GithubSyncButton />
             </div>
           </div>
@@ -119,10 +146,16 @@ export default async function GithubConnectionPage({
               <ul className="flex flex-col divide-y divide-border">
                 {installations.items.map((installation) => {
                   const Icon = installation.accountType === 'Organization' ? Building2 : UserRound;
+                  const missing = installation.permissions ? missingPermissions(installation.permissions) : [];
                   return (
                     <li key={installation.installationId} className="flex items-center gap-3 py-3">
                       <Icon aria-hidden className="size-4 shrink-0 text-text-subtle" />
-                      <span className="min-w-0 flex-1 truncate font-semibold text-white">{installation.accountLogin}</span>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate font-semibold text-white">{installation.accountLogin}</span>
+                        {missing.length > 0 ? (
+                          <span className="text-xs text-warning">Missing {missing.join(', ')}</span>
+                        ) : null}
+                      </span>
                       <span className="hidden text-xs text-text-subtle sm:inline">{installation.accountType}</span>
                       <a
                         href={manageUrl(web, installation)}
@@ -164,6 +197,9 @@ export default async function GithubConnectionPage({
                 { label: 'App ID', value: <span className="font-mono">{app.appId}</span> },
               ]}
             />
+            <Link href="/connections/github?replace=1" className={`${EXTERNAL} self-start text-sm`}>
+              Use a different App
+            </Link>
           </section>
           <IdentityRow mode={mode} />
         </div>

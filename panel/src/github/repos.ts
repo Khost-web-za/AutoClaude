@@ -64,7 +64,7 @@ export async function listRepos(
   return paginateArray(filtered, page);
 }
 
-/** Branches of one repo (default branch first), through a token scoped to that repo. Cached 60 s. */
+/** Branches of one repo (default branch first), through a read-only token scoped to that repo. Cached 60 s. */
 export async function listBranches(
   fullName: string,
   { page, query }: { page: number; query: string },
@@ -75,7 +75,7 @@ export async function listBranches(
   if (!installation) throw new NoInstallationError(owner);
 
   const branches = (await deps.listCache.getOrLoad(`branches|${owner.toLowerCase()}/${name.toLowerCase()}`, async () => {
-    const { token } = await installationToken(deps, installation.installationId, name);
+    const { token } = await installationToken(deps, installation.installationId, name, 'read');
     const all = await githubGetAll(deps.apiUrl, `/repos/${owner}/${name}/branches`, {
       token,
       extract: (json) => branchListResponse.parse(json),

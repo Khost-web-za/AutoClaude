@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { githubApp, githubInstallations } from '@/db/schema';
 import { parsePrivateKey, signAppJwt } from './app-jwt';
+import { MissingPermissionsError, missingPermissions } from './app-permissions';
 import { githubRequest } from './github-api';
 import type { GithubDeps } from './github-deps';
 
@@ -91,9 +92,13 @@ const appResponse = z.object({
   slug: z.string().min(1),
   html_url: z.string().min(1),
   owner: z.object({ login: z.string().min(1) }),
+  permissions: z.record(z.string(), z.string()).default({}),
 });
 
-/** "Use an existing App": proves the key and id with GET /app before anything is stored. */
+/**
+ * "Use an existing App": proves the key and id with GET /app before anything is stored, and refuses an
+ * App without the permissions sessions need (e.g. one made for deploys, which cannot push).
+ */
 export async function saveExistingApp(
   input: { appId: number; slug: string; clientId: string; clientSecret: string; privateKey: string },
   deps: GithubDeps,
@@ -102,6 +107,8 @@ export async function saveExistingApp(
   const { json } = await githubRequest(deps.apiUrl, '/app', { token: jwt });
   const app = appResponse.parse(json);
   if (app.id !== input.appId) throw new Error('GitHub reports a different App id for this key');
+  const missing = missingPermissions(app.permissions);
+  if (missing.length > 0) throw new MissingPermissionsError(missing);
   await saveApp(
     {
       appId: app.id,

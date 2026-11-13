@@ -15,6 +15,13 @@
       "when": 1794508574205,
       "tag": "0001_seed_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794594403312,
+      "tag": "0002_installation_permissions",
+      "breakpoints": true
     }
   ]
 }

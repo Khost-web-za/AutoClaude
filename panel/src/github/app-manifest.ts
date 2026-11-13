@@ -1,16 +1,9 @@
 import { z } from 'zod';
+import { GITHUB_APP_PERMISSIONS } from './app-permissions';
 import { saveApp } from './app-store';
 import { githubRequest, githubWebUrl } from './github-api';
 import type { GithubDeps } from './github-deps';
 import { assertState, issueState, type StateCookie } from './oauth-state';
-
-/** The only permissions the panel ever asks for, on the App and on every token it mints. */
-export const GITHUB_APP_PERMISSIONS = {
-  contents: 'write',
-  pull_requests: 'write',
-  metadata: 'read',
-  workflows: 'write',
-} as const;
 
 const APP_NAME_LIMIT = 34;
 const ORG_NAME = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;

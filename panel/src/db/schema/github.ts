@@ -1,4 +1,4 @@
-import { bigint, check, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import { bigint, check, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const githubApp = pgTable(
@@ -19,5 +19,7 @@ export const githubInstallations = pgTable('github_installations', {
   installationId: bigint({ mode: 'number' }).primaryKey(),
   accountLogin: text().notNull(),
   accountType: text().notNull(),
+  /** What the account granted the App, as GitHub reports it; null until the next record or sync. */
+  permissions: jsonb().$type<Record<string, string>>(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });

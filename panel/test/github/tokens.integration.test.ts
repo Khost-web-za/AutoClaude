@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GITHUB_APP_PERMISSIONS } from '@/github/app-manifest';
+import { GITHUB_APP_PERMISSIONS } from '@/github/app-permissions';
 import { NoInstallationError, mintGitCredential, githubIdentityMode } from '@/github/tokens';
 import { resolveCommitIdentity } from '@/github/user-auth';
 import { seedApp, seedInstallation, tokenReply, withGithub, type GithubCtx } from './github-fixtures';

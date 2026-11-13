@@ -128,8 +128,9 @@ describe('listBranches', () => {
       expect(filtered.items.map((b) => b.name)).toEqual(
         names.filter((n) => n.toLowerCase().includes('f1')),
       );
-      const tokenBody = ctx.stub.requests.find((r) => r.path.endsWith('/access_tokens'))?.body as { repositories: string[] };
-      expect(tokenBody.repositories).toEqual(['widgets']);
+      const tokenBody = ctx.stub.requests.find((r) => r.path.endsWith('/access_tokens'))?.body;
+      // Read-only: an App that cannot grant session permissions can still list branches.
+      expect(tokenBody).toEqual({ repositories: ['widgets'], permissions: { contents: 'read', metadata: 'read' } });
     });
   });
 });

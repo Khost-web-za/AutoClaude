@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { GITHUB_APP_PERMISSIONS } from './app-manifest';
+import { GITHUB_APP_PERMISSIONS, GITHUB_READ_PERMISSIONS } from './app-permissions';
 import { appJwt } from './app-store';
 import { githubRequest } from './github-api';
 import { sharedGithubDeps, type GithubDeps, type InstallationTokenValue } from './github-deps';
@@ -29,20 +29,24 @@ const accessTokenResponse = z.object({ token: z.string().min(1), expires_at: z.s
 
 /**
  * An installation access token, cached in memory until 5 minutes before it expires. With `repo` the
- * token is limited to that one repository and the App's four permissions; without it, read-only
- * metadata (enough to list repositories).
+ * token is limited to that one repository: the App's four permissions for `access: 'session'`, or
+ * contents/metadata read for `'read'`. Without `repo`, read-only metadata (enough to list repositories).
  */
 export function installationToken(
   deps: GithubDeps,
   installationId: number,
   repo: string | null,
+  access: 'session' | 'read' = 'session',
 ): Promise<InstallationTokenValue> {
-  return deps.tokenCache.getOrLoad(`${installationId}|${repo ?? '*'}`, async () => {
+  return deps.tokenCache.getOrLoad(`${installationId}|${repo ?? '*'}|${repo ? access : 'meta'}`, async () => {
     const { json } = await githubRequest(deps.apiUrl, `/app/installations/${installationId}/access_tokens`, {
       method: 'POST',
       token: await appJwt(deps),
       body: repo
-        ? { repositories: [repo], permissions: GITHUB_APP_PERMISSIONS }
+        ? {
+            repositories: [repo],
+            permissions: access === 'session' ? GITHUB_APP_PERMISSIONS : GITHUB_READ_PERMISSIONS,
+          }
         : { permissions: { metadata: 'read' } },
     });
     const parsed = accessTokenResponse.parse(json);
