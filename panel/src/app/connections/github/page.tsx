@@ -3,8 +3,9 @@ import { Building2, ExternalLink, Plus, UserRound } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireOwner } from '@/auth/require-owner';
-import { authorizeGithubAsMe, disconnectGithubApp } from '@/connections/github-actions';
+import { authorizeGithubAsMe } from '@/connections/github-actions';
 import { GithubAppSetup } from '@/connections/github-app-setup';
+import { GithubDisconnectDialog } from '@/connections/github-disconnect-dialog';
 import { githubCallbackNotice } from '@/connections/github-notices';
 import { GithubSyncButton } from '@/connections/github-sync-button';
 import { parsePageParam } from '@/db/pagination';
@@ -31,7 +32,7 @@ function manageUrl(web: string, installation: InstallationRow): string {
     : `${web}/settings/installations/${installation.installationId}`;
 }
 
-function IdentityRow({ mode }: { mode: 'user' | 'app' }) {
+function IdentityRow({ mode, authorizeUrl }: { mode: 'user' | 'app'; authorizeUrl: string }) {
   return (
     <section className="flex flex-col gap-4">
       <SectionLabel>Who opens pull requests</SectionLabel>
@@ -46,11 +47,18 @@ function IdentityRow({ mode }: { mode: 'user' | 'app' }) {
             <span aria-hidden className="size-2 rounded-full bg-status-waiting" />
             PRs will be opened as the App, not you
           </p>
-          <form action={authorizeGithubAsMe}>
-            <Button type="submit" variant="secondary" className="min-h-11">
-              Authorize as me
-            </Button>
-          </form>
+          <div className="flex flex-wrap gap-3">
+            <form action={authorizeGithubAsMe}>
+              <Button type="submit" variant="secondary" className="min-h-11">
+                Authorize as me
+              </Button>
+            </form>
+            <CopyLinkButton url={authorizeUrl} label="Copy authorize link" />
+          </div>
+          <p className="text-sm text-muted">
+            Signed in to the wrong GitHub account here? Open the copied link in a browser signed in to the right one
+            (it asks for your panel login there too).
+          </p>
         </div>
       )}
       <p className="text-sm text-muted">
@@ -88,18 +96,11 @@ export default async function GithubConnectionPage({
           <div className="mb-8">
             <Banner
               tone="warning"
-              title={`Replacing ${app.slug}. Its installations and your "Authorize as me" token are forgotten once the new App is saved, or right away if you disconnect. Running sessions lose GitHub access.`}
+              title={`Replacing ${app.slug}. Its installations and your "Authorize as me" token are forgotten once the new App is saved.`}
               action={
-                <span className="flex items-center gap-4">
-                  <form action={disconnectGithubApp}>
-                    <Button type="submit" variant="danger" className="min-h-11">
-                      Disconnect
-                    </Button>
-                  </form>
-                  <Link href="/connections/github" className={EXTERNAL}>
-                    Cancel
-                  </Link>
-                </span>
+                <Link href="/connections/github" className={EXTERNAL}>
+                  Cancel
+                </Link>
               }
             />
           </div>
@@ -174,6 +175,11 @@ export default async function GithubConnectionPage({
                         Manage
                         <ExternalLink aria-hidden className="size-3.5" />
                       </a>
+                      <CopyLinkButton
+                        url={manageUrl(web, installation)}
+                        iconOnly
+                        label={`Copy the manage link for ${installation.accountLogin}`}
+                      />
                     </li>
                   );
                 })}
@@ -204,11 +210,17 @@ export default async function GithubConnectionPage({
                 { label: 'App ID', value: <span className="font-mono">{app.appId}</span> },
               ]}
             />
-            <Link href="/connections/github?replace=1" className={`${EXTERNAL} self-start text-sm`}>
-              Use a different App or disconnect
-            </Link>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/connections/github?replace=1"
+                className={buttonVariants({ variant: 'secondary', className: 'min-h-11' })}
+              >
+                Use a different App
+              </Link>
+              <GithubDisconnectDialog slug={app.slug} />
+            </div>
           </section>
-          <IdentityRow mode={mode} />
+          <IdentityRow mode={mode} authorizeUrl={`${deps.publicUrl}/api/github/oauth/start`} />
         </div>
       </div>
     </>

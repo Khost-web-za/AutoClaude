@@ -113,12 +113,17 @@ export async function syncGithubInstallations(): Promise<SyncResult> {
   return { ok: true, message: 'Installations synced.' };
 }
 
-/** "Disconnect": forgets the App, its installations and the user token, back to the setup screen. */
-export async function disconnectGithubApp(): Promise<void> {
+/** "Disconnect": forgets the App, its installations and the user token. Never calls GitHub. */
+export async function disconnectGithubApp(): Promise<SyncResult> {
   await requireOwner();
-  await removeApp(sharedGithubDeps());
+  try {
+    await removeApp(sharedGithubDeps());
+  } catch (error) {
+    console.error('[github] disconnect failed:', error instanceof Error ? error.name : 'error');
+    return { ok: false, message: 'Could not disconnect the App. Try again.' };
+  }
   revalidatePath('/', 'layout');
-  redirect(`${PAGE}?disconnected=1`);
+  return { ok: true, message: 'GitHub App disconnected.' };
 }
 
 /** "Authorize as me": sets the state cookie and sends the browser to GitHub's consent screen. */

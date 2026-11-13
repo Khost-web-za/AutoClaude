@@ -3,7 +3,7 @@ import { completeManifest } from './app-manifest';
 import type { GithubDeps } from './github-deps';
 import { recordInstallation } from './installations';
 import { InvalidStateError, STATE_COOKIE_NAMES, type StatePurpose } from './oauth-state';
-import { completeUserAuthorization } from './user-auth';
+import { completeUserAuthorization, startUserAuthorization } from './user-auth';
 
 /**
  * The bodies of the three GitHub redirect routes. The route files call requireOwner() first and pass the
@@ -57,6 +57,22 @@ export async function handleOAuthCallback(request: NextRequest, deps: GithubDeps
     return failure(error, 'oauth');
   }
   return clearStateCookie(redirectTo(deps, 'authorized=1'), 'oauth');
+}
+
+/**
+ * Starts "Authorize as me" from a plain link, so it can be copied into another browser (one signed in to a
+ * different GitHub account): the state cookie is set in whichever browser opens it.
+ */
+export async function handleOAuthStart(deps: GithubDeps): Promise<NextResponse> {
+  try {
+    const { url, cookie } = await startUserAuthorization(deps);
+    const response = NextResponse.redirect(url, 303);
+    response.cookies.set(cookie.name, cookie.value, cookie.options);
+    return response;
+  } catch (error) {
+    console.error('[github] oauth start failed:', error instanceof Error ? error.name : 'error');
+    return redirectTo(deps, 'error=authorize_failed');
+  }
 }
 
 /** GitHub sends the browser here after an installation; the id is confirmed against the API, not trusted. */
