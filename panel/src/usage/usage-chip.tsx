@@ -2,7 +2,7 @@
 
 import { Popover } from '@heroui/react';
 import { Gauge } from 'lucide-react';
-import { usageTone } from './usage-format';
+import { effectiveWindow, staleLabel, usageTone } from './usage-format';
 import { unavailableDetail } from './usage-labels';
 import type { UsageViewData } from './usage-data';
 import { roundPct, TONE_TEXT, UsageWindowRow } from './usage-window-row';
@@ -14,7 +14,10 @@ export function UsageChip({ data: initial, className = '' }: { data: UsageViewDa
   const data = useLiveUsage(initial);
   const now = useUsageClock(data.renderedAt);
   const { snapshot, settings } = data;
-  const top = snapshot ? Math.max(snapshot.fiveHour.pct, snapshot.weekly.pct) : null;
+  const top = snapshot
+    ? Math.max(effectiveWindow(snapshot.fiveHour, now).pct, effectiveWindow(snapshot.weekly, now).pct)
+    : null;
+  const stale = snapshot ? staleLabel(snapshot.fetchedAt, now, settings.timeZone) : null;
   const tone = top === null ? 'ok' : usageTone(top, settings.warnPct, settings.dangerPct);
 
   return (
@@ -44,6 +47,7 @@ export function UsageChip({ data: initial, className = '' }: { data: UsageViewDa
                   settings={settings}
                 />
               ))}
+              {stale ? <p className="text-xs text-text-subtle">{stale}</p> : null}
             </>
           ) : (
             <p className="text-sm text-muted">
