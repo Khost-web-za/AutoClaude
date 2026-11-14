@@ -232,7 +232,7 @@ async function resumeOne(ctx: RunContext, row: DueRow, message: string): Promise
     usage,
     claudeRunning: pane.claudeRunning,
   });
-  const values = await takeStep(deps, row, containerId, step, message);
+  const values = await takeStep(deps, row, containerId, step, message, pane.screen?.limitMenu ?? false);
 
   // Only if nothing else moved the row meanwhile: a prompt reaching Claude clears the limit (runner API).
   const [written] = await deps.db
@@ -249,6 +249,7 @@ async function takeStep(
   containerId: string,
   step: ResumeStep,
   message: string,
+  limitMenu: boolean,
 ): Promise<LimitValues> {
   const attempts = row.resumeAttempts + 1;
   switch (step.kind) {
@@ -266,7 +267,8 @@ async function takeStep(
     case 'fail':
       return { limitState: 'failed', resumeNextAt: null, limitDetail: step.detail };
     case 'type': {
-      const detail = await failureDetail(() => deps.typeIntoClaude(containerId, message, { escapeFirst: true }));
+      // Escape only closes the limit menu; at the prompt it would interrupt Claude.
+      const detail = await failureDetail(() => deps.typeIntoClaude(containerId, message, { escapeFirst: limitMenu }));
       return { limitState: 'resuming', resumeAttempts: attempts, resumeNextAt: step.nextAt, limitDetail: detail };
     }
     case 'relaunch': {

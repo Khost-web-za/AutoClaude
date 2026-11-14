@@ -38,7 +38,46 @@ describe('readScreen', () => {
   });
 
   it('is limited without a reset time when none can be read', () => {
-    expect(readScreen('Claude usage limit reached', NOW)).toMatchObject({ limited: true, resetsAt: null });
+    expect(readScreen('  ⎿  Weekly limit reached ∙ resets Monday', NOW)).toMatchObject({ limited: true, resetsAt: null });
+  });
+
+  it('reads the older "Your limit will reset at" wording', () => {
+    const pane = 'Claude usage limit reached. Your limit will reset at 3pm (Europe/Berlin).';
+    expect(readScreen(pane, NOW)).toMatchObject({ limited: true, resetsAt: new Date('2026-11-14T14:00:00Z') });
+  });
+
+  it('reads "You\'ve hit your limit"', () => {
+    expect(readScreen("  ⎿  You've hit your limit · resets 3pm", NOW)).toMatchObject({
+      limited: true,
+      resetsAt: new Date('2026-11-14T15:00:00Z'),
+    });
+  });
+
+  it('needs the reset clause (or the limit menu) with the notice', () => {
+    expect(readScreen('Claude usage limit reached', NOW).limited).toBe(false);
+  });
+
+  it('accepts a reset clause on the line after the notice, and a continuation line', () => {
+    const pane = ['> go', '', '  ⎿  5-hour limit reached', '     resets 3pm', '     /upgrade to increase your usage limit.'].join('\n');
+    expect(readScreen(pane, NOW)).toMatchObject({ limited: true, resetsAt: new Date('2026-11-14T15:00:00Z') });
+  });
+
+  it('ignores an assistant reply that talks about usage limits', () => {
+    expect(readScreen(fixture('assistant-mentions-usage-limit'), NOW)).toMatchObject({ limited: false, resetsAt: null });
+  });
+
+  it('ignores tool output that mentions a rate or usage limit', () => {
+    expect(readScreen(fixture('tool-output-rate-limit'), NOW)).toMatchObject({ limited: false, resetsAt: null });
+  });
+
+  it('ignores a notice that is not the latest thing in the transcript', () => {
+    const pane = ['> go', '  ⎿  5-hour limit reached ∙ resets 3pm', '', '⏺ Carrying on with the refactor.'].join('\n');
+    expect(readScreen(pane, NOW).limited).toBe(false);
+  });
+
+  it('ignores notice-like text inside a line', () => {
+    expect(readScreen('  ⎿  Error: usage limit reached, resets 3pm', NOW).limited).toBe(false);
+    expect(readScreen('  ⎿  Rate limit reached for requests, resets 3pm', NOW).limited).toBe(false);
   });
 
   it('ignores a limit line above a later prompt', () => {
@@ -63,6 +102,12 @@ describe('readScreen', () => {
     const read = readScreen(fixture('limit-options-menu'), NOW);
     expect(read.limited).toBe(true);
     expect(read.blocking).toBeNull();
+    expect(read.limitMenu).toBe(true);
+  });
+
+  it('a limit notice above the prompt box is not the limit menu', () => {
+    expect(readScreen(fixture('limit-5-hour'), NOW).limitMenu).toBe(false);
+    expect(readScreen(fixture('permission-prompt'), NOW).limitMenu).toBe(false);
   });
 
   it('empty prompt', () => {
@@ -72,7 +117,11 @@ describe('readScreen', () => {
 
   it('a prompt with typed text is not empty', () => {
     const pane = ['────────────', '> half a thought', '────────────', '  ? for shortcuts'].join('\n');
-    expect(readScreen(pane, NOW).promptEmpty).toBe(false);
+    expect(readScreen(pane, NOW)).toMatchObject({ promptEmpty: false, promptDraft: true });
+  });
+
+  it('an empty prompt holds no draft', () => {
+    expect(readScreen(fixture('empty-prompt'), NOW).promptDraft).toBe(false);
   });
 
   it('strips ANSI before reading', () => {

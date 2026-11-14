@@ -90,6 +90,21 @@ describe('auto-resume job', () => {
       });
     }));
 
+  it('never marks a session limited from replies or tool output that mention a limit', () =>
+    withTestDb(async ({ db }) => {
+      const reply = await seed(db);
+      const tool = await seed(db);
+      const panes: Record<string, string> = {
+        [reply.containerId!]: fixture('assistant-mentions-usage-limit'),
+        [tool.containerId!]: fixture('tool-output-rate-limit'),
+      };
+      const deps = setup(db, { capturePane: vi.fn(async (id: string) => panes[id]!), getUsage: async () => usage(80, null) });
+      await runResumeJob(deps, NOW);
+      expect((await load(db, reply.id)).limitState).toBe('none');
+      expect((await load(db, tool.id)).limitState).toBe('none');
+      expect(deps.publish).not.toHaveBeenCalled();
+    }));
+
   it('prefers the usage reset and falls back to 15 minutes when nothing says', () =>
     withTestDb(async ({ db }) => {
       const usageReset = plus(RESET, 30);
@@ -98,7 +113,7 @@ describe('auto-resume job', () => {
       expect((await load(db, fromUsage.id)).limitResetsAt).toEqual(usageReset);
 
       const unknown = await seed(db);
-      const capturePane = vi.fn(async () => fixture('limit-5-hour').replace(/resets?[^\n]*/i, ''));
+      const capturePane = vi.fn(async () => fixture('limit-5-hour').replace('resets 3pm', 'resets Monday'));
       await runResumeJob(setup(db, { capturePane, getUsage: async () => ({ snapshot: null, stale: true, reason: 'unavailable' }) }), NOW);
       const after = await load(db, unknown.id);
       expect(after.limitState).toBe('limited');
@@ -170,7 +185,7 @@ describe('auto-resume job', () => {
       expect((await load(db, row.id)).resumeAttempts).toBe(1);
     }));
 
-  it("types the repo's message with Escape first", () =>
+  it("types the repo's message, without Escape at the prompt", () =>
     withTestDb(async ({ db }) => {
       await db.insert(repoSettings).values({ repoFullName: 'acme/widgets', resumeMessage: 'Keep going, please.' });
       const row = await seed(db, waiting(0, plus(RESET, 1)));
@@ -180,8 +195,8 @@ describe('auto-resume job', () => {
       const deps = setup(db, { resumeMessagesFor, capturePane: vi.fn(async () => fixture('limit-5-hour')) });
       await runResumeJob(deps, plus(RESET, 1));
       expect(resumeMessagesFor).toHaveBeenCalledTimes(1);
-      expect(deps.typeIntoClaude).toHaveBeenCalledWith(other.containerId, 'Please continue where you left off.', { escapeFirst: true });
-      expect(deps.typeIntoClaude).toHaveBeenCalledWith(row.containerId, 'Keep going, please.', { escapeFirst: true });
+      expect(deps.typeIntoClaude).toHaveBeenCalledWith(other.containerId, 'Please continue where you left off.', { escapeFirst: false });
+      expect(deps.typeIntoClaude).toHaveBeenCalledWith(row.containerId, 'Keep going, please.', { escapeFirst: false });
       const after = await load(db, row.id);
       expect(after.limitState).toBe('resuming');
       expect(after.resumeAttempts).toBe(1);
@@ -193,6 +208,24 @@ describe('auto-resume job', () => {
         resumeAt: plus(RESET, 6).toISOString(),
         detail: null,
       });
+    }));
+
+  it('presses Escape first only to close the limit menu', () =>
+    withTestDb(async ({ db }) => {
+      await seed(db, waiting(0, plus(RESET, 1)));
+      const deps = setup(db, { capturePane: vi.fn(async () => fixture('limit-options-menu')) });
+      await runResumeJob(deps, plus(RESET, 1));
+      expect(deps.typeIntoClaude).toHaveBeenCalledWith(expect.any(String), 'Please continue where you left off.', { escapeFirst: true });
+    }));
+
+  it('never types over a draft in the prompt', () =>
+    withTestDb(async ({ db }) => {
+      const row = await seed(db, waiting(0, plus(RESET, 1)));
+      const draft = fixture('limit-5-hour').replace(/^> $/m, '> half a thought');
+      const deps = setup(db, { capturePane: vi.fn(async () => draft) });
+      await runResumeJob(deps, plus(RESET, 1));
+      expect(deps.typeIntoClaude).not.toHaveBeenCalled();
+      expect((await load(db, row.id)).limitDetail).toBe('Waiting: the prompt has unsent text');
     }));
 
   it('leaves a step that is not yet due', () =>

@@ -17,6 +17,8 @@ const MIN_STEP_GAP_MIN = 2;
 const MAX_SCREEN_RESET_MS = 6 * 60 * MINUTE_MS;
 
 export const HOLD_DETAIL = 'Waiting: Claude is asking something';
+export const DRAFT_DETAIL = 'Waiting: the prompt has unsent text';
+export const NOT_AT_PROMPT_DETAIL = 'Waiting: Claude is not at an empty prompt';
 export const NO_RESPONSE_DETAIL = 'Resume failed: no response after relaunch';
 
 export type ResumeStep =
@@ -76,8 +78,13 @@ export function planResume(input: ResumeInput): ResumeStep {
 
   const nextMinutes =
     attempts === TYPED_ATTEMPTS ? GIVE_UP_OFFSET_MIN : (RESUME_OFFSETS_MIN[attempts + 1] ?? RELAUNCH_OFFSET_MIN);
-  // Never type over (or relaunch away) a question Claude is asking.
-  if (screen?.blocking) return { kind: 'hold', nextAt: scheduled(nextMinutes), detail: HOLD_DETAIL };
+  // Never type over (or relaunch away) a question Claude is asking, or text the user has not sent.
+  const waitingOn = screen?.blocking ? HOLD_DETAIL : screen?.promptDraft ? DRAFT_DETAIL : null;
+  if (waitingOn) return { kind: 'hold', nextAt: scheduled(nextMinutes), detail: waitingOn };
   if (attempts === TYPED_ATTEMPTS) return { kind: 'relaunch', nextAt: scheduled(GIVE_UP_OFFSET_MIN) };
+  // Only type at the limit notice or an empty prompt.
+  if (!screen?.limited && !screen?.promptEmpty) {
+    return { kind: 'hold', nextAt: scheduled(nextMinutes), detail: NOT_AT_PROMPT_DETAIL };
+  }
   return { kind: 'type', nextAt: scheduled(nextMinutes) };
 }

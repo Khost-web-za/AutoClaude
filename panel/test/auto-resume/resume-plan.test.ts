@@ -11,6 +11,8 @@ const screen = (overrides: Partial<ScreenRead> = {}): ScreenRead => ({
   resetsAt: null,
   blocking: null,
   promptEmpty: true,
+  promptDraft: false,
+  limitMenu: false,
   ...overrides,
 });
 
@@ -121,7 +123,34 @@ describe('planResume', () => {
     });
   });
 
-  it('types without usage or screen information', () => {
-    expect(planResume(input({ usage: null, screen: null }))).toEqual({ kind: 'type', nextAt: plus(RESET, 6) });
+  it('types without usage information', () => {
+    expect(planResume(input({ usage: null }))).toEqual({ kind: 'type', nextAt: plus(RESET, 6) });
+  });
+
+  it('types at the limit notice even when no prompt box is recognised', () => {
+    expect(planResume(input({ screen: screen({ limited: true, promptEmpty: false }) }))).toEqual({
+      kind: 'type',
+      nextAt: plus(RESET, 6),
+    });
+  });
+
+  it('holds when the screen is neither at the limit nor at an empty prompt', () => {
+    const notAtPrompt = { kind: 'hold', nextAt: plus(RESET, 6), detail: 'Waiting: Claude is not at an empty prompt' };
+    expect(planResume(input({ screen: screen({ promptEmpty: false }) }))).toEqual(notAtPrompt);
+    expect(planResume(input({ screen: null }))).toEqual(notAtPrompt);
+  });
+
+  it('never types over (or relaunches away) text the user has not sent', () => {
+    const draft = screen({ limited: true, promptEmpty: false, promptDraft: true });
+    expect(planResume(input({ screen: draft }))).toEqual({
+      kind: 'hold',
+      nextAt: plus(RESET, 6),
+      detail: 'Waiting: the prompt has unsent text',
+    });
+    expect(planResume(input({ attempts: 3, now: plus(RESET, 18), screen: draft }))).toEqual({
+      kind: 'hold',
+      nextAt: plus(RESET, 21),
+      detail: 'Waiting: the prompt has unsent text',
+    });
   });
 });
