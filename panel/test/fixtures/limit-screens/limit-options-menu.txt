@@ -1,9 +1,10 @@
 # synthetic: written from Claude Code's on-screen strings, not captured from a live session
-────────────────────────────────────────────────────────────────────────
+
 > keep going
 
   ⎿  5-hour limit reached ∙ resets 3pm
 
+────────────────────────────────────────────────────────────────────────
  What do you want to do?
 
  ❯ 1. Stop and wait for limit to reset

@@ -1,4 +1,9 @@
 # synthetic: written from Claude Code's on-screen strings, not captured from a live session
+
+> install left-pad
+
+⏺ I'll add the dependency.
+
 ────────────────────────────────────────────────────────────────────────
  Bash command
 

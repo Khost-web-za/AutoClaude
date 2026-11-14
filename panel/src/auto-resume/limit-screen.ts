@@ -8,14 +8,17 @@ export type ScreenRead = {
   promptEmpty: boolean;
 };
 
-const VISIBLE_LINES = 15;
+const SCREENFUL_LINES = 40;
+const DIALOG_FALLBACK_LINES = 15;
 const DAY_MS = 24 * 60 * 60_000;
 
-const DIVIDER = /^\s*[─━]{8,}\s*$/;
+const DIVIDER = /^\s*[╭╰]?[─━]{8,}[╮╯]?\s*$/;
+const INPUT_LINE = /^\s*(?:[│|]\s*)?>/;
+const SUBMITTED_PROMPT = /^\s*>\s+\S/;
 const LIMIT = /limit reached|hit your (?:usage |session )?limit|usage limit/i;
 const RESET = /resets?(?: at)?\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm))(?:\s*\(([^)]+)\))?/i;
 const PERMISSION = /Do you want to|❯\s*1\.\s*Yes/;
-const NUMBERED_MENU = /^\s*(?:❯\s*)?\d+\.\s+\S/m;
+const NUMBERED_MENU = /^\s*❯\s*\d+\.\s+\S/m;
 const RATE_LIMIT_MENU = /wait for limit to reset|upgrade your plan|extra usage/i;
 const EMPTY_INPUT = /^\s*(?:[│|]\s*)?>\s*(?:[│|]\s*)?$/;
 
@@ -51,24 +54,43 @@ function resetTime(text: string, containerTimeZone: string, now: Date): Date | n
   return nextResetAfter(match[1]!, containerTimeZone, now);
 }
 
-/** What Claude Code's visible screen says: usage limit and reset, anything blocking input, empty prompt. */
+/**
+ * What Claude Code's visible screen says: usage limit and reset, anything blocking input, empty prompt.
+ *
+ * Layout, top to bottom: transcript (user `> prompt`, assistant lines, `⎿` notices), then either the live
+ * prompt box (divider, input line, divider) plus footer, or a dialog/menu drawn in place of the box.
+ */
 export function readScreen(pane: string, now: Date, containerTimeZone = 'UTC'): ScreenRead {
   const lines = stripAnsi(pane).replace(/\r/g, '').split('\n');
   const dividers = lines.flatMap((line, index) => (DIVIDER.test(line) ? [index] : []));
-  const lastDivider = dividers.at(-1) ?? -1;
-
-  // Only what is below the last prompt box divider and on the last lines counts; older output has scrolled.
-  const visible = lines.slice(Math.max(lastDivider + 1, lines.length - VISIBLE_LINES)).join('\n');
-  const limited = LIMIT.test(visible);
-
-  let blocking: ScreenRead['blocking'] = null;
-  if (PERMISSION.test(visible)) blocking = 'permission';
-  else if (NUMBERED_MENU.test(visible) && !RATE_LIMIT_MENU.test(visible)) blocking = 'question';
-
-  // The input line sits between the last two dividers (above the one the footer hangs from).
   const boxTop = dividers.at(-2);
-  const input = boxTop === undefined ? undefined : lines.slice(boxTop + 1, lastDivider).find((line) => /^\s*(?:[│|]\s*)?>/.test(line));
+  const boxBottom = dividers.at(-1);
+  const hasBox =
+    boxTop !== undefined && boxBottom !== undefined && lines.slice(boxTop + 1, boxBottom).some((line) => INPUT_LINE.test(line));
+
+  // Transcript: the last screenful above the live box. Only what follows the last submitted prompt counts,
+  // so a limit message from an earlier turn that has scrolled up never retriggers.
+  const end = hasBox ? boxTop : lines.length;
+  const window = lines.slice(Math.max(0, end - SCREENFUL_LINES), end);
+  const lastPrompt = window.findLastIndex((line) => SUBMITTED_PROMPT.test(line));
+  const transcript = window.slice(lastPrompt + 1).join('\n');
+  const limited = LIMIT.test(transcript);
+
+  // A dialog exists only while the prompt box is gone; it starts at the last divider when there is one.
+  let blocking: ScreenRead['blocking'] = null;
+  if (!hasBox) {
+    let start = lines.length - DIALOG_FALLBACK_LINES;
+    if (boxBottom !== undefined) {
+      const after = lines.slice(boxBottom + 1);
+      start = after.some((line) => line.trim()) || boxTop === undefined ? boxBottom + 1 : boxTop + 1;
+    }
+    const dialog = lines.slice(Math.max(0, start)).join('\n');
+    if (PERMISSION.test(dialog)) blocking = 'permission';
+    else if (NUMBERED_MENU.test(dialog) && !RATE_LIMIT_MENU.test(dialog)) blocking = 'question';
+  }
+
+  const input = hasBox ? lines.slice(boxTop + 1, boxBottom).find((line) => INPUT_LINE.test(line)) : undefined;
   const promptEmpty = input !== undefined && EMPTY_INPUT.test(input);
 
-  return { limited, resetsAt: limited ? resetTime(visible, containerTimeZone, now) : null, blocking, promptEmpty };
+  return { limited, resetsAt: limited ? resetTime(transcript, containerTimeZone, now) : null, blocking, promptEmpty };
 }

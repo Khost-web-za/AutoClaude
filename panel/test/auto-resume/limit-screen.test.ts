@@ -80,8 +80,33 @@ describe('readScreen', () => {
     expect(readScreen(pane, NOW)).toMatchObject({ limited: true, resetsAt: new Date('2026-11-14T15:00:00Z') });
   });
 
-  it('only reads the last 15 lines', () => {
-    const pane = ['5-hour limit reached ∙ resets 3pm', ...Array.from({ length: 15 }, (_, i) => `line ${i}`)].join('\n');
+  it('only reads the last screenful', () => {
+    const pane = ['5-hour limit reached ∙ resets 3pm', ...Array.from({ length: 40 }, (_, i) => `line ${i}`)].join('\n');
     expect(readScreen(pane, NOW).limited).toBe(false);
+  });
+
+  it('finds a limit above an empty prompt box when no later prompt was submitted', () => {
+    const read = readScreen(fixture('limit-5-hour'), NOW);
+    expect(read).toMatchObject({ limited: true, promptEmpty: true, blocking: null });
+  });
+
+  it('reads the rounded prompt box style', () => {
+    expect(readScreen(fixture('limit-rounded-box'), NOW)).toMatchObject({ limited: true, promptEmpty: true });
+  });
+
+  it('a numbered list and "Do you want to" in prose above the prompt box are not blocking', () => {
+    const pane = [
+      '> plan it',
+      '',
+      '  Do you want to hear the options? Here they are:',
+      '  1. Rewrite it',
+      '  2. Patch it',
+      '',
+      '────────────',
+      '> ',
+      '────────────',
+      '  ? for shortcuts',
+    ].join('\n');
+    expect(readScreen(pane, NOW)).toMatchObject({ blocking: null, promptEmpty: true });
   });
 });
