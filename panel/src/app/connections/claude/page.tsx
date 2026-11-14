@@ -50,7 +50,7 @@ export default async function ClaudeConnectionPage() {
   const [status, settings] = await Promise.all([getClaudeStatus(), getSettings()]);
   const now = new Date();
   return (
-    <div className="grid max-w-6xl gap-12 lg:grid-cols-[1.25fr_1fr] lg:gap-16">
+    <div className="grid max-w-6xl grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-16">
       <ClaudeLoginStepper connected={status?.state === 'connected'} />
       <div className="flex flex-col gap-10">
         <section className="flex flex-col gap-5">

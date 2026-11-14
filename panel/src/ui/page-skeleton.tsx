@@ -53,7 +53,7 @@ export function FormSkeleton({ fields = 6 }: { fields?: number }) {
 /** Label/value rows (a facts list) while they load. */
 export function FactsSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div aria-busy="true" className="grid grid-cols-[8rem_1fr] gap-x-6 gap-y-4">
+    <div aria-busy="true" className="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-6 gap-y-4">
       {Array.from({ length: rows }, (_, i) => (
         <div key={i} className="contents">
           <Skeleton className="h-4 w-20 rounded-lg" />

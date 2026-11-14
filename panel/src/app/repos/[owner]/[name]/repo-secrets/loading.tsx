@@ -3,7 +3,7 @@ import { ListSkeleton } from '@/ui/page-skeleton';
 
 export default function RepoSecretsLoading() {
   return (
-    <div aria-busy="true" className="grid max-w-6xl gap-12 lg:grid-cols-[1fr_1fr] lg:gap-16">
+    <div aria-busy="true" className="grid max-w-6xl grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
       <div className="flex flex-col gap-4">
         <Skeleton className="h-3 w-32 rounded-lg" />
         <Skeleton className="h-11 w-full max-w-md rounded-xl" />

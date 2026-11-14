@@ -33,7 +33,7 @@ export default async function RepoSecretsPage({ params, searchParams }: Props) {
   const rows = page.items.map((item) => ({ name: item.ref.slice(prefix.length), updated: formatAgo(item.updatedAt, now) }));
 
   return (
-    <div className="grid max-w-6xl gap-12 lg:grid-cols-[1fr_1fr] lg:gap-16">
+    <div className="grid max-w-6xl grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-16">
       <section className="flex flex-col gap-4">
         <SectionLabel>Add or replace</SectionLabel>
         <p className="text-sm text-muted">

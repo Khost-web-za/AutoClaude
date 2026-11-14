@@ -12,7 +12,7 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'sw
 const firaCode = Fira_Code({ subsets: ['latin'], variable: '--font-fira-code', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: { default: 'claudecloud', template: '%s - claudecloud' },
+  title: { default: 'AutoClaude', template: '%s - AutoClaude' },
   robots: { index: false, follow: false },
 };
 
@@ -22,7 +22,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="bg-background font-sans text-foreground antialiased">
         <div className="lg:flex">
           <PanelSidebar />
-          <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
+          <div className="flex min-h-dvh min-w-0 flex-1 flex-col overflow-x-clip">
             <PanelTopBar />
             <main className="mx-auto w-full max-w-[90rem] flex-1 px-4 py-6 sm:px-8 lg:px-10 lg:py-10">
               <SiteBanners />

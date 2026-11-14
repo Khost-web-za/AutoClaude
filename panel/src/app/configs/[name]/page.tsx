@@ -57,7 +57,7 @@ export default async function ConfigDetailPage({ params }: Params) {
           ) : undefined
         }
       />
-      <div className="grid max-w-6xl gap-12 lg:grid-cols-[1fr_18rem] lg:gap-16">
+      <div className="grid max-w-6xl grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_18rem] lg:gap-16">
         <section className="flex min-w-0 flex-col gap-4">
           <SectionLabel>CLAUDE.md</SectionLabel>
           {unreadable ? (

@@ -131,7 +131,7 @@ export default async function GithubConnectionPage({
           />
         </div>
       ) : null}
-      <div className="grid max-w-6xl gap-12 lg:grid-cols-[1.25fr_1fr] lg:gap-16">
+      <div className="grid max-w-6xl grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:gap-16">
         <section className="flex flex-col gap-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <SectionLabel>Installed on</SectionLabel>
