@@ -50,6 +50,13 @@
       "when": 1794664531966,
       "tag": "0006_modern_lionheart",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794699390132,
+      "tag": "0007_fearless_blue_marvel",
+      "breakpoints": true
     }
   ]
 }

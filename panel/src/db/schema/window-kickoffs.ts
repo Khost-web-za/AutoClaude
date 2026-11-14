@@ -12,7 +12,9 @@ export const windowKickoffs = pgTable(
     status: kickoffStatus().notNull().default('scheduled'),
     outcome: text(),
     windowResetsAt: timestamp({ withTimezone: true }),
-    createdAt: timestamp({ withTimezone: true }).defaultNow(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    /** When a job took the row (`running`); an interruption is timed from here, not from `runAt`. */
+    claimedAt: timestamp({ withTimezone: true }),
     finishedAt: timestamp({ withTimezone: true }),
   },
   (t) => [index('window_kickoffs_status_run_at_idx').on(t.status, t.runAt)],

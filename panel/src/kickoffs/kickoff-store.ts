@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, lte, ne, sql } from 'drizzle-orm';
 import type { Db } from '@/db/client';
 import { paginate, type PageResult } from '@/db/pagination';
 import { windowKickoffs, type KickoffRow } from '@/db/schema';
@@ -69,11 +69,12 @@ export async function removeKickoff(db: Db, id: string): Promise<boolean> {
 export function claimDueKickoffs(db: Db, now: Date): Promise<KickoffRow[]> {
   return db
     .update(windowKickoffs)
-    .set({ status: 'running' })
+    .set({ status: 'running', claimedAt: now })
     .where(and(eq(windowKickoffs.status, 'scheduled'), lte(windowKickoffs.runAt, now)))
     .returning();
 }
 
+/** Records how a running kick-off ended; one that is no longer `running` (failed as interrupted) is left alone. */
 export async function finishKickoff(
   db: Db,
   id: string,
@@ -87,16 +88,22 @@ export async function finishKickoff(
       windowResetsAt: result.windowResetsAt ?? null,
       finishedAt: new Date(),
     })
-    .where(eq(windowKickoffs.id, id));
+    .where(and(eq(windowKickoffs.id, id), eq(windowKickoffs.status, 'running')));
 }
 
-/** A kick-off still `running` long after it was due belongs to a panel that restarted: fail it. */
+/**
+ * A kick-off still `running` 5 minutes after it was claimed belongs to a panel that restarted: fail it. Rows
+ * claimed before claimed_at existed fall back to their run_at.
+ */
 export async function failInterrupted(db: Db, now: Date): Promise<number> {
   const rows = await db
     .update(windowKickoffs)
     .set({ status: 'failed', outcome: 'Interrupted: the panel restarted', finishedAt: now })
     .where(
-      and(eq(windowKickoffs.status, 'running'), lt(windowKickoffs.runAt, new Date(now.getTime() - INTERRUPTED_AFTER_MS))),
+      and(
+        eq(windowKickoffs.status, 'running'),
+        sql`coalesce(${windowKickoffs.claimedAt}, ${windowKickoffs.runAt}) < ${new Date(now.getTime() - INTERRUPTED_AFTER_MS).toISOString()}::timestamptz`,
+      ),
     )
     .returning({ id: windowKickoffs.id });
   return rows.length;

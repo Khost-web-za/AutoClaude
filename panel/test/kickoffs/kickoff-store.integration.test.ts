@@ -82,13 +82,42 @@ describe('kick-off store', () => {
   it('marks an interrupted running kick-off failed', () =>
     withTestDb(async ({ db }) => {
       const stale = await addKickoff(db, at('2026-11-14T10:00:00Z'));
+      await claimDueKickoffs(db, at('2026-11-14T10:00:00Z'));
       const recent = await addKickoff(db, at('2026-11-14T10:58:00Z'));
-      await claimDueKickoffs(db, at('2026-11-14T11:00:00Z'));
+      await claimDueKickoffs(db, at('2026-11-14T10:58:00Z'));
       expect(await failInterrupted(db, at('2026-11-14T11:00:00Z'))).toBe(1);
       const { items } = await listHistory(db, 1);
       const byId = new Map(items.map((r) => [r.id, r]));
       expect(byId.get(stale.id)).toMatchObject({ status: 'failed', outcome: 'Interrupted: the panel restarted' });
       expect(byId.get(stale.id)?.finishedAt).not.toBeNull();
       expect(byId.get(recent.id)?.status).toBe('running');
+    }));
+
+  it('times an interruption from the claim, not from run_at: a late catch-up is not failed as it starts', () =>
+    withTestDb(async ({ db }) => {
+      const late = await addKickoff(db, at('2026-11-14T10:30:00Z'));
+      const [claimed] = await claimDueKickoffs(db, at('2026-11-14T10:55:00Z'));
+      expect(claimed?.claimedAt).toEqual(at('2026-11-14T10:55:00Z'));
+      expect(await failInterrupted(db, at('2026-11-14T10:56:00Z'))).toBe(0);
+      expect(await failInterrupted(db, at('2026-11-14T11:01:00Z'))).toBe(1);
+      const { items } = await listHistory(db, 1);
+      expect(items.find((r) => r.id === late.id)?.status).toBe('failed');
+    }));
+
+  it('finishes only a running kick-off', () =>
+    withTestDb(async ({ db }) => {
+      const scheduled = await addKickoff(db, at('2026-11-15T10:00:00Z'));
+      await finishKickoff(db, scheduled.id, { status: 'started', outcome: 'Window started' });
+      expect((await listUpcoming(db)).map((r) => r.id)).toEqual([scheduled.id]);
+
+      const interrupted = await addKickoff(db, at('2026-11-14T10:00:00Z'));
+      await claimDueKickoffs(db, at('2026-11-14T10:00:00Z'));
+      await failInterrupted(db, at('2026-11-14T10:10:00Z'));
+      await finishKickoff(db, interrupted.id, { status: 'started', outcome: 'Window started' });
+      const { items } = await listHistory(db, 1);
+      expect(items.find((r) => r.id === interrupted.id)).toMatchObject({
+        status: 'failed',
+        outcome: 'Interrupted: the panel restarted',
+      });
     }));
 });
