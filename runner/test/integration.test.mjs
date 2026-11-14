@@ -117,6 +117,23 @@ test("creates work branch from base", { skip: !enabled }, async () => {
   assert.equal(docker("exec", "-u", "claude", name, "git", "-C", "/workspace/repo", "config", "user.email").trim(), "test@users.noreply.github.com");
 });
 
+test("push mode works on the base branch", { skip: !enabled }, async () => {
+  const { name, panel } = await startSession({ DELIVERY_MODE: "push", WORK_BRANCH: "main" });
+  await waitFor(() => bootSteps(panel).includes("branch:done"), 60_000, "branch step");
+  const git = (...args) => docker("exec", "-u", "claude", name, "git", "-C", "/workspace/repo", ...args).trim();
+  assert.equal(git("rev-parse", "--abbrev-ref", "HEAD"), "main");
+  assert.equal(git("rev-parse", "--abbrev-ref", "main@{upstream}"), "origin/main");
+  assert.equal(git("branch", "--list", "claude/*"), "");
+});
+
+test("push mode with a different work branch fails clearly", { skip: !enabled }, async () => {
+  const { name, panel } = await startSession({ DELIVERY_MODE: "push" });
+  assert.equal(await containerExitCode(name), 1);
+  const failed = panel.events.find((e) => e.type === "boot_step" && e.data.status === "failed");
+  assert.equal(failed?.data.step, "branch");
+  assert.match(failed.data.error, /equal BASE_BRANCH/);
+});
+
 test("starting task reaches claude byte-for-byte", { skip: !enabled }, async () => {
   const { name } = await happySession();
   const argv = execFileSync("docker", ["exec", "-u", "claude", name, "cat", "/tmp/stub-argv"]).toString("utf8").split("\0").slice(0, -1);

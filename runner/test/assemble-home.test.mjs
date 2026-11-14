@@ -9,16 +9,17 @@ import { assembleHome } from "../lib/assemble-home.mjs";
 const configDir = fileURLToPath(new URL("./fixtures/session-config", import.meta.url));
 const overlayDir = fileURLToPath(new URL("../overlay", import.meta.url));
 
-async function assemble() {
+async function assemble(extraVars = {}) {
   const root = mkdtempSync(join(tmpdir(), "home-"));
   const homeDir = join(root, "home");
   const authDir = join(root, "auth");
   mkdirSync(authDir);
   const repoDir = "/workspace/repo";
-  await assembleHome({ configDir, overlayDir, homeDir, repoDir, authDir, vars: { WORK_BRANCH: "claude/fix-a1b2", DEFAULT_BRANCH: "main" } });
+  await assembleHome({ configDir, overlayDir, homeDir, repoDir, authDir, vars: { WORK_BRANCH: "claude/fix-a1b2", DEFAULT_BRANCH: "main", ...extraVars } });
   const settings = JSON.parse(readFileSync(join(homeDir, ".claude", "settings.json"), "utf8"));
   const sessionSettings = JSON.parse(readFileSync(join(overlayDir, "settings.session.json"), "utf8"));
-  return { homeDir, authDir, repoDir, settings, sessionSettings };
+  const md = readFileSync(join(homeDir, ".claude", "CLAUDE.md"), "utf8");
+  return { homeDir, authDir, repoDir, settings, sessionSettings, md };
 }
 
 test("copies skills", async () => {
@@ -62,6 +63,21 @@ test("CLAUDE.md has user content then session content", async () => {
   assert.ok(md.indexOf("Use Tailwind.") < md.indexOf("disposable container"));
   assert.ok(md.includes("claude/fix-a1b2"));
   assert.ok(!md.includes("${WORK_BRANCH}"));
+});
+
+test("push mode writes the push rules and no PR instruction", async () => {
+  const { md } = await assemble({ DELIVERY_MODE: "push", WORK_BRANCH: "main" });
+  assert.ok(md.includes("there is no pull request"));
+  assert.ok(md.includes("work directly on `main`"));
+  assert.ok(!md.includes("open a pull request against"));
+  assert.ok(!md.includes("${"));
+});
+
+test("default mode keeps the PR rules", async () => {
+  const { md } = await assemble();
+  assert.ok(md.includes("open a pull request"));
+  assert.ok(md.includes("Never push to the default branch `main`"));
+  assert.ok(!md.includes("there is no pull request"));
 });
 
 test("credentials link points into authDir", { skip: process.platform === "win32" && "symlinks need privileges on Windows" }, async () => {

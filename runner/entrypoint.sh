@@ -74,7 +74,12 @@ else
   step clone done
 
   step branch started
-  out=$(git -C "$REPO_DIR" switch -c "$WORK_BRANCH" 2>&1) || fail branch "git switch -c '$WORK_BRANCH' failed: $(printf '%s\n' "$out" | summarize)"
+  if [ "${DELIVERY_MODE:-}" = "push" ]; then
+    # Push mode works directly on the cloned base branch (already tracking origin/$BASE_BRANCH).
+    [ "$WORK_BRANCH" = "$BASE_BRANCH" ] || fail branch "push mode needs WORK_BRANCH to equal BASE_BRANCH"
+  else
+    out=$(git -C "$REPO_DIR" switch -c "$WORK_BRANCH" 2>&1) || fail branch "git switch -c '$WORK_BRANCH' failed: $(printf '%s\n' "$out" | summarize)"
+  fi
   step branch done
 fi
 

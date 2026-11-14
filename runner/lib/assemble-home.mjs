@@ -86,9 +86,11 @@ export async function assembleHome({ configDir, overlayDir, homeDir, repoDir, au
   const sessionSettings = await readJson(join(overlayDir, "settings.session.json"), {});
   await writeFile(join(claudeDir, "settings.json"), JSON.stringify(mergeSettings(userSettings, sessionSettings), null, 2) + "\n");
 
-  // 3. CLAUDE.md = user + session overlay
+  // 3. CLAUDE.md = user + session overlay (delivery rules depend on DELIVERY_MODE)
   const userMd = await readText(join(configDir, "CLAUDE.md"));
-  const sessionMd = substitute(await readText(join(overlayDir, "CLAUDE.session.md")), vars);
+  const mode = vars.DELIVERY_MODE === "push" ? "push" : "pull_request";
+  const deliveryRules = substitute((await readText(join(overlayDir, `delivery-${mode}.md`))).trimEnd(), vars);
+  const sessionMd = substitute(await readText(join(overlayDir, "CLAUDE.session.md")), { ...vars, DELIVERY_RULES: deliveryRules });
   await writeFile(join(claudeDir, "CLAUDE.md"), userMd ? `${userMd}\n\n${sessionMd}` : sessionMd);
 
   // 4. shared credentials (spike: "Credential sharing")
