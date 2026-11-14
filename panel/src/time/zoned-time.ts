@@ -34,6 +34,15 @@ export function wallTimeToInstant(local: string, timeZone: string): Date {
   return new Date(candidates[0] ?? asUtc - offsetBefore * 60_000);
 }
 
+/** The next instant after `now` at which the clocks in `timeZone` read `time` (`HH:mm`): later today, else tomorrow. */
+export function nextWallClock(time: string, timeZone: string, now: Date): Date {
+  const today = instantToWallTime(now, timeZone).slice(0, 10);
+  const todays = wallTimeToInstant(`${today}T${time}`, timeZone);
+  if (todays.getTime() > now.getTime()) return todays;
+  const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
+  return wallTimeToInstant(`${tomorrow}T${time}`, timeZone);
+}
+
 /** `YYYY-MM-DDTHH:mm` as the clocks in `timeZone` read at `at`. */
 export function instantToWallTime(at: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', {

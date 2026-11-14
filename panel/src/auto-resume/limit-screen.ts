@@ -1,5 +1,5 @@
 import { stripAnsi } from '@/claude/ansi';
-import { instantToWallTime, wallTimeToInstant } from '@/time/zoned-time';
+import { nextWallClock } from '@/time/zoned-time';
 
 export type ScreenRead = {
   /** Claude's limit notice is the latest thing in the transcript. */
@@ -16,7 +16,6 @@ export type ScreenRead = {
 
 const SCREENFUL_LINES = 40;
 const DIALOG_FALLBACK_LINES = 15;
-const DAY_MS = 24 * 60 * 60_000;
 
 const DIVIDER = /^\s*[╭╰]?[─━]{8,}[╮╯]?\s*$/;
 const INPUT_LINE = /^\s*(?:[│|]\s*)?>/;
@@ -45,14 +44,7 @@ function nextResetAfter(clock: string, timeZone: string, now: Date): Date | null
   const minute = Number(match[2] ?? 0);
   if (hour12 < 1 || hour12 > 12 || minute > 59) return null;
   const hour = (hour12 % 12) + (match[3]!.toLowerCase() === 'pm' ? 12 : 0);
-  const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  const today = instantToWallTime(now, timeZone).slice(0, 10);
-  let reset = wallTimeToInstant(`${today}T${time}`, timeZone);
-  if (reset.getTime() <= now.getTime()) {
-    const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + DAY_MS).toISOString().slice(0, 10);
-    reset = wallTimeToInstant(`${tomorrow}T${time}`, timeZone);
-  }
-  return reset;
+  return nextWallClock(`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`, timeZone, now);
 }
 
 function resetTime(text: string, containerTimeZone: string, now: Date): Date | null {

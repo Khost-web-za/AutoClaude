@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { instantToWallTime, wallTimeToInstant } from '@/time/zoned-time';
+import { instantToWallTime, nextWallClock, wallTimeToInstant } from '@/time/zoned-time';
 
 describe('zoned time', () => {
   it('converts a wall time in Africa/Johannesburg', () => {
@@ -34,5 +34,12 @@ describe('zoned time', () => {
 
   it('rejects a malformed wall time', () => {
     expect(() => wallTimeToInstant('2026-11-15 04:00', 'UTC')).toThrow();
+  });
+
+  it('finds the next time the clocks read HH:mm: later today, else tomorrow', () => {
+    const zone = 'Europe/Berlin'; // UTC+1 in November
+    expect(nextWallClock('04:00', zone, new Date('2026-11-15T00:00:00Z'))).toEqual(new Date('2026-11-15T03:00:00Z')); // 01:00 local
+    expect(nextWallClock('04:00', zone, new Date('2026-11-15T04:00:00Z'))).toEqual(new Date('2026-11-16T03:00:00Z')); // 05:00 local
+    expect(nextWallClock('04:00', zone, new Date('2026-11-15T03:00:00Z'))).toEqual(new Date('2026-11-16T03:00:00Z')); // exactly now
   });
 });
