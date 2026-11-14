@@ -7,12 +7,12 @@ import { unavailableDetail } from './usage-labels';
 import type { UsageViewData } from './usage-data';
 import { roundPct, TONE_TEXT, UsageWindowRow } from './usage-window-row';
 import { useLiveUsage } from './use-live-usage';
-import { useUsageClock } from './use-usage-clock';
+import { useClock } from '@/time/use-clock';
 
 /** Mobile header: one chip with the higher of the two percentages; the popover lists everything. */
 export function UsageChip({ data: initial, className = '' }: { data: UsageViewData; className?: string }) {
   const data = useLiveUsage(initial);
-  const now = useUsageClock(data.renderedAt);
+  const now = useClock(data.renderedAt);
   const { snapshot, settings } = data;
   const top = snapshot
     ? Math.max(effectiveWindow(snapshot.fiveHour, now).pct, effectiveWindow(snapshot.weekly, now).pct)

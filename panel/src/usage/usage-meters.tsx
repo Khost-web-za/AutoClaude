@@ -6,12 +6,12 @@ import { unavailableDetail } from './usage-labels';
 import type { UsageViewData } from './usage-data';
 import { UsageWindowRow } from './usage-window-row';
 import { useLiveUsage } from './use-live-usage';
-import { useUsageClock } from './use-usage-clock';
+import { useClock } from '@/time/use-clock';
 
 /** Desktop header: the 5-hour and weekly bars side by side; per-model weekly windows in the tooltip. */
 export function UsageMeters({ data: initial, className = '' }: { data: UsageViewData; className?: string }) {
   const data = useLiveUsage(initial);
-  const now = useUsageClock(data.renderedAt);
+  const now = useClock(data.renderedAt);
   const { snapshot, settings } = data;
 
   const stale = snapshot ? staleLabel(snapshot.fetchedAt, now, settings.timeZone) : null;
