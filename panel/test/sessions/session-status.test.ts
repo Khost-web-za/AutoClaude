@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { SessionStatus } from '@/db/schema';
-import { nextStatus, type RunnerEvent } from '@/sessions/session-status';
+import type { LimitState, SessionStatus } from '@/db/schema';
+import { nextLimitState, nextStatus, type RunnerEvent } from '@/sessions/session-status';
 
 const ev = (type: RunnerEvent['type'], data: Record<string, unknown> = {}): RunnerEvent => ({
   type,
@@ -33,5 +33,25 @@ describe('nextStatus', () => {
   ];
   it.each(rows)('%s', (_name, current, event, expected) => {
     expect(nextStatus(current, event)).toEqual(expected);
+  });
+});
+
+describe('nextLimitState', () => {
+  const cleared = { limitState: 'none', resumeAttempts: 0, limitResetsAt: null, resumeNextAt: null, limitDetail: null };
+  const crashed = { limitState: 'failed', resumeNextAt: null, limitDetail: 'Resume failed: Claude crashed' };
+  const rows: [string, LimitState, RunnerEvent, object | null][] = [
+    ['prompt clears limited', 'limited', ev('hook', { event: 'UserPromptSubmit' }), cleared],
+    ['prompt clears resuming', 'resuming', ev('hook', { event: 'UserPromptSubmit' }), cleared],
+    ['prompt leaves none', 'none', ev('hook', { event: 'UserPromptSubmit' }), null],
+    ['prompt leaves failed', 'failed', ev('hook', { event: 'UserPromptSubmit' }), null],
+    ['Stop leaves resuming', 'resuming', ev('hook', { event: 'Stop' }), null],
+    ['fatal exit fails resuming', 'resuming', ev('claude_exited', { code: 1, restarting: false, fatal: true }), crashed],
+    ['fatal exit fails limited', 'limited', ev('claude_exited', { code: 1, restarting: false, fatal: true }), crashed],
+    ['restart leaves resuming', 'resuming', ev('claude_exited', { code: 1, restarting: true, fatal: false }), null],
+    ['requested relaunch leaves resuming', 'resuming', ev('claude_exited', { code: 0, restarting: true, fatal: false, requested: true }), null],
+    ['fatal exit leaves none', 'none', ev('claude_exited', { code: 1, restarting: false, fatal: true }), null],
+  ];
+  it.each(rows)('%s', (_name, current, event, expected) => {
+    expect(nextLimitState(current, event)).toEqual(expected);
   });
 });

@@ -9,7 +9,7 @@ import { NoInstallationError } from '@/github/tokens';
 import { eventBus } from '@/live/event-bus';
 import { secretStore as sharedSecretStore, type SecretStore } from '@/secret-store/secret-store';
 import { isBranchBusyViolation } from '@/sessions/capacity';
-import { nextStatus, redactEventData, type RunnerEvent } from '@/sessions/session-status';
+import { nextLimitState, nextStatus, redactEventData, type LimitChange, type RunnerEvent } from '@/sessions/session-status';
 import { verifySession, type Session } from './session-auth';
 
 const MAX_BODY_BYTES = 64 * 1024;
@@ -71,6 +71,7 @@ export function createRunnerApiServer(deps: RunnerApiDeps): http.Server {
 
   async function recordEvent(session: Session, event: RunnerEvent): Promise<void> {
     const at = new Date(event.at);
+    let limit = null as LimitChange | null;
     const change = await db.transaction(async (tx) => {
       // Lock the row so concurrent events apply to the latest status in arrival order.
       const [row] = await tx.select().from(sessions).where(eq(sessions.id, session.id)).for('update');
@@ -81,6 +82,8 @@ export function createRunnerApiServer(deps: RunnerApiDeps): http.Server {
         at,
       });
       if (!row || row.deletedAt) return null;
+      limit = nextLimitState(row.limitState, event);
+      if (limit) await tx.update(sessions).set(limit).where(eq(sessions.id, session.id));
       const next = nextStatus(row.status, event);
       const url = event.type === 'remote_control_url' ? event.data.url : undefined;
       const status = next?.status ?? row.status;
@@ -113,6 +116,15 @@ export function createRunnerApiServer(deps: RunnerApiDeps): http.Server {
     });
 
     eventBus.publish({ kind: 'session_event', sessionId: session.id, type: event.type, at: event.at });
+    if (limit) {
+      eventBus.publish({
+        kind: 'session_limit',
+        sessionId: session.id,
+        limitState: limit.limitState,
+        resumeAt: null,
+        detail: limit.limitDetail,
+      });
+    }
     if (change) {
       eventBus.publish({
         kind: 'session',

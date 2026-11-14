@@ -3,7 +3,7 @@
 import { useEffect, useRef } from 'react';
 import type { LiveEvent } from './event-bus';
 
-const LIVE_KINDS = ['session', 'session_event', 'usage', 'host', 'kickoffs'] as const satisfies readonly LiveEvent['kind'][];
+const LIVE_KINDS = ['session', 'session_event', 'usage', 'host', 'kickoffs', 'session_limit'] as const satisfies readonly LiveEvent['kind'][];
 const BACKOFF_START_MS = 3000;
 const BACKOFF_MAX_MS = 30_000;
 
