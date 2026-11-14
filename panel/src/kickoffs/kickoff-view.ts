@@ -6,6 +6,8 @@ export type KickoffView = {
   runAt: string;
   status: KickoffStatus;
   outcome: string | null;
+  /** Only on the browser's optimistic placeholder for a kick-off still being saved. */
+  pending?: true;
 };
 
 export function toKickoffView(row: KickoffRow): KickoffView {

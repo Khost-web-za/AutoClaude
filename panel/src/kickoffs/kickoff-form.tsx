@@ -2,29 +2,41 @@
 
 import { Button, Description, Input, Label, TextField } from '@heroui/react';
 import { Plus } from 'lucide-react';
-import { useState, useTransition, type FormEvent } from 'react';
-import { notifyError, notifySuccess, UNREACHABLE_MESSAGE } from '@/feedback/toast-host';
-import { instantToWallTime } from '@/time/zoned-time';
+import { useState, type FormEvent } from 'react';
+import { instantToWallTime, wallTimeToInstant } from '@/time/zoned-time';
 import { addKickoffAction } from './kickoff-actions';
+import { pendingKickoff } from './kickoff-changes';
+import type { RunKickoffChange } from './kickoff-schedule';
 
 const CHIP_HOURS = [1, 3, 5] as const;
 
-/** Picks a start time (read in the settings zone) and schedules a kick-off. The list refreshes from the server. */
-export function KickoffForm({ timeZone, defaultLocal }: { timeZone: string; defaultLocal: string }) {
+/**
+ * Picks a start time (read in the settings zone) and schedules a kick-off. The new row shows in the list at
+ * once (optimistic); the server validates the time and, if it says no, the row goes away and a toast says why.
+ */
+export function KickoffForm({
+  timeZone,
+  defaultLocal,
+  run,
+  nextPendingId,
+}: {
+  timeZone: string;
+  defaultLocal: string;
+  run: RunKickoffChange;
+  nextPendingId: () => string;
+}) {
   const [value, setValue] = useState(defaultLocal);
-  const [isPending, startTransition] = useTransition();
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    startTransition(async () => {
-      try {
-        const result = await addKickoffAction(value);
-        if (result.ok) notifySuccess('Kick-off scheduled.');
-        else notifyError(result.error);
-      } catch {
-        notifyError(UNREACHABLE_MESSAGE);
-      }
-    });
+    const local = value;
+    let runAt: Date;
+    try {
+      runAt = wallTimeToInstant(local, timeZone);
+    } catch {
+      return; // not a complete wall time; the required field already says so
+    }
+    run({ type: 'add', row: pendingKickoff(nextPendingId(), runAt) }, () => addKickoffAction(local));
   }
 
   return (
@@ -48,7 +60,7 @@ export function KickoffForm({ timeZone, defaultLocal }: { timeZone: string; defa
           </Button>
         ))}
       </div>
-      <Button type="submit" variant="primary" isPending={isPending} className="min-h-11 self-start">
+      <Button type="submit" variant="primary" className="min-h-11 self-start">
         <Plus aria-hidden className="size-4" />
         Add
       </Button>

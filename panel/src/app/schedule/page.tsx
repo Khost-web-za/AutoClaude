@@ -2,9 +2,8 @@ import type { Metadata } from 'next';
 import { requireOwner } from '@/auth/require-owner';
 import { db } from '@/db/client';
 import { parsePageParam } from '@/db/pagination';
-import { KickoffForm } from '@/kickoffs/kickoff-form';
 import { KickoffHistory } from '@/kickoffs/kickoff-history';
-import { KickoffList } from '@/kickoffs/kickoff-list';
+import { KickoffSchedule } from '@/kickoffs/kickoff-schedule';
 import { listHistory, listUpcoming } from '@/kickoffs/kickoff-store';
 import { toKickoffView } from '@/kickoffs/kickoff-view';
 import { getSettings } from '@/settings/settings-store';
@@ -40,11 +39,7 @@ export default async function SchedulePage({
         description="Start the 5-hour usage window at a time you choose, so it resets when you want it to."
       />
       <div className="flex max-w-3xl flex-col gap-12">
-        <KickoffForm timeZone={settings.timeZone} defaultLocal={defaultLocal} />
-        <section className="flex flex-col gap-2">
-          <SectionLabel>Upcoming</SectionLabel>
-          <KickoffList rows={upcoming.map(toKickoffView)} timeZone={settings.timeZone} now={now} />
-        </section>
+        <KickoffSchedule rows={upcoming.map(toKickoffView)} timeZone={settings.timeZone} now={now} defaultLocal={defaultLocal} />
         <section className="flex flex-col gap-2">
           <SectionLabel>History</SectionLabel>
           <KickoffHistory rows={history.items.map(toKickoffView)} timeZone={settings.timeZone} />
