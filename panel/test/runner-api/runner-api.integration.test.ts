@@ -219,12 +219,12 @@ describe('runner api', () => {
       expect(seen).toContainEqual({ kind: 'session_limit', sessionId: id, limitState: 'none', resumeAt: null, detail: null });
     }));
 
-  it('a prompt leaves a failed limit alone', () =>
+  it('a prompt clears a failed resume (the user carried on by hand)', () =>
     setup(async ({ db, id, call }) => {
-      await db.update(sessions).set({ limitState: 'failed', limitDetail: 'Resume failed: Claude crashed' }).where(eq(sessions.id, id));
+      await db.update(sessions).set({ limitState: 'failed', limitDetail: 'Resume failed: no response after relaunch' }).where(eq(sessions.id, id));
       await call('/api/runner/events', { body: event('hook', { event: 'UserPromptSubmit' }) });
       const [row] = await db.select().from(sessions).where(eq(sessions.id, id));
-      expect(row?.limitState).toBe('failed');
+      expect(row).toMatchObject({ limitState: 'none', limitDetail: null });
     }));
 
   it('fatal exit fails a resuming session', () =>
