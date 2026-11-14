@@ -1,4 +1,5 @@
 import type Docker from 'dockerode';
+import type { DeliveryMode } from '@/db/schema';
 import { sessionShortId } from './work-branch';
 
 /** The panel's internal runner API, reached over the stack network (never published). */
@@ -27,6 +28,7 @@ export type ContainerSpecInput = {
   memoryGb: number;
   diskGb: number;
   storageOptSupported: boolean;
+  deliveryMode: DeliveryMode;
 };
 
 export const sessionContainerName = (sessionId: string) => `claudecloud-session-${sessionShortId(sessionId)}`;
@@ -66,6 +68,7 @@ export function buildContainerSpec(input: ContainerSpecInput): Docker.ContainerC
     `GIT_AUTHOR_NAME=${input.gitAuthor.name}`,
     `GIT_AUTHOR_EMAIL=${input.gitAuthor.email}`,
     ...(input.runtime === 'sysbox-runc' ? ['SESSION_DOCKER=true'] : []),
+    `DELIVERY_MODE=${input.deliveryMode}`,
   ];
 
   return {

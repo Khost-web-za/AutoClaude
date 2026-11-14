@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { DeliveryMode } from '@/db/schema';
 import { RepoNotAccessibleError } from '@/github/repos';
 import { NoInstallationError } from '@/github/tokens';
 import type { Profile } from '@/profiles/profile-catalog';
@@ -17,6 +18,7 @@ export const newSessionRequestSchema = z.object({
     .string()
     .max(STARTING_TASK_MAX, `At most ${STARTING_TASK_MAX.toLocaleString('en-US')} characters`)
     .nullish(),
+  deliveryMode: z.enum(['pull_request', 'push']).optional(),
 });
 
 export type NewSessionRequest = z.input<typeof newSessionRequestSchema>;
@@ -29,6 +31,8 @@ type ValidationDeps = {
   profiles: readonly Profile[];
   /** `assertRepoAccessible`: canonical `Owner/Name`, or RepoNotAccessibleError. */
   resolveRepo: (fullName: string) => Promise<{ fullName: string }>;
+  /** The repository's default delivery mode, used when the request does not pick one. */
+  readDeliveryMode: (repoFullName: string) => Promise<DeliveryMode>;
 };
 
 /**
@@ -59,6 +63,7 @@ export async function validateNewSession(raw: unknown, deps: ValidationDeps): Pr
     throw error;
   }
 
+  const deliveryMode = request.deliveryMode ?? (await deps.readDeliveryMode(fullName));
   const task = request.startingTask ?? '';
   return {
     ok: true,
@@ -67,6 +72,7 @@ export async function validateNewSession(raw: unknown, deps: ValidationDeps): Pr
       baseBranch: request.baseBranch,
       profiles: [...new Set(request.profiles)],
       startingTask: task.trim() ? task : null,
+      deliveryMode,
     },
   };
 }

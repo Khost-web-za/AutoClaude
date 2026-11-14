@@ -1,9 +1,11 @@
 import { asc, eq } from 'drizzle-orm';
+import postgres from 'postgres';
 import { describe, expect, it } from 'vitest';
 import { repoSettings, sessionProfiles, sessions } from '@/db/schema';
 import { withTestDb } from '@/db/testing';
 import type { HostStats } from '@/host/host-stats-types';
 import {
+  BranchBusyError,
   CapacityError,
   InsufficientDiskError,
   SysboxCheckFailedError,
@@ -13,7 +15,14 @@ import { restartSession, startSession } from '@/sessions/start-session';
 import { stopSession } from '@/sessions/stop-session';
 import { fakeDocker, setMaxRunning, testDeps } from './session-test-deps';
 
-const input = { repoFullName: 'acme/widgets', baseBranch: 'main', profiles: ['frontend'], startingTask: 'Fix the bug' };
+const input = {
+  repoFullName: 'acme/widgets',
+  baseBranch: 'main',
+  profiles: ['frontend'],
+  startingTask: 'Fix the bug',
+  deliveryMode: 'pull_request' as const,
+};
+const pushInput = { ...input, deliveryMode: 'push' as const };
 const GB = 1024 ** 3;
 
 describe('startSession capacity (Review Focus 3)', () => {
@@ -203,5 +212,125 @@ describe('restartSession on a container that is already running (Task 11 carry)'
       expect(row?.statusDetail).toBe('container was already running');
       // The runner does not boot again, so no new link would ever arrive: the old one is kept.
       expect(row?.remoteControlUrl).toBe('https://claude.ai/code/remote/abc');
+    }));
+});
+
+describe('push-mode sessions: one live session per branch (Task 6)', () => {
+  it('push mode uses the base branch as the work branch and sets DELIVERY_MODE=push', () =>
+    withTestDb(async ({ db }) => {
+      const specs: string[][] = [];
+      const base = fakeDocker();
+      const docker = {
+        ...base.docker,
+        createContainer: async (spec: { Env?: string[] }) => {
+          specs.push(spec.Env ?? []);
+          return base.docker.createContainer(spec);
+        },
+      } as unknown as typeof base.docker;
+      const { sessionId } = await startSession(pushInput, testDeps(db, { docker }));
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId));
+      expect(row).toMatchObject({ deliveryMode: 'push', baseBranch: 'main', workBranch: 'main' });
+      expect(specs[0]).toContain('DELIVERY_MODE=push');
+      expect(specs[0]).toContain('WORK_BRANCH=main');
+    }));
+
+  it('second push session on the same branch is refused with BranchBusyError and creates no container', () =>
+    withTestDb(async ({ db }) => {
+      const { docker, calls } = fakeDocker();
+      const deps = testDeps(db, { docker });
+      const { sessionId: first } = await startSession(pushInput, deps);
+      const refused = await startSession(pushInput, deps).catch((e: unknown) => e);
+      expect(refused).toBeInstanceOf(BranchBusyError);
+      expect((refused as Error).message).toBe(`Session ${first.slice(0, 4)} is already working on main. Stop it first.`);
+      expect(await db.select().from(sessions)).toHaveLength(1);
+      expect(calls.filter((call) => call.startsWith('create '))).toHaveLength(1);
+    }));
+
+  it('another branch, another repository or a stopped holder do not block', () =>
+    withTestDb(async ({ db }) => {
+      const deps = testDeps(db);
+      const { sessionId: first } = await startSession(pushInput, deps);
+      await startSession({ ...pushInput, baseBranch: 'develop' }, deps);
+      await startSession({ ...pushInput, repoFullName: 'acme/other' }, deps);
+      await stopSession(first, deps);
+      await expect(startSession(pushInput, deps)).resolves.toMatchObject({ sessionId: expect.any(String) });
+    }));
+
+  it('same branch in pull_request mode is not refused', () =>
+    withTestDb(async ({ db }) => {
+      const deps = testDeps(db);
+      await startSession(pushInput, deps);
+      const { sessionId } = await startSession(input, deps);
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId));
+      expect(row).toMatchObject({ deliveryMode: 'pull_request', status: 'starting' });
+      expect(row?.workBranch).toMatch(/^claude\//);
+    }));
+
+  it('restart refuses a busy branch; the stopped session stays stopped', () =>
+    withTestDb(async ({ db }) => {
+      const deps = testDeps(db);
+      const { sessionId: a } = await startSession(pushInput, deps);
+      await stopSession(a, deps);
+      const { sessionId: b } = await startSession(pushInput, deps);
+      const refused = await restartSession(a, deps).catch((e: unknown) => e);
+      expect(refused).toBeInstanceOf(BranchBusyError);
+      expect((refused as Error).message).toContain(`Session ${b.slice(0, 4)} `);
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, a));
+      expect(row?.status).toBe('stopped');
+    }));
+
+  it('restarting a push session that holds its branch is not refused by itself', () =>
+    withTestDb(async ({ db }) => {
+      const deps = testDeps(db);
+      const { sessionId } = await startSession(pushInput, deps);
+      await expect(restartSession(sessionId, deps)).resolves.toBeUndefined();
+      await stopSession(sessionId, deps);
+      await expect(restartSession(sessionId, deps)).resolves.toBeUndefined();
+    }));
+
+  it('concurrent double submit: exactly one live session, the other is BranchBusyError with no container', () =>
+    withTestDb(async ({ db }) => {
+      const { docker, calls } = fakeDocker();
+      const deps = testDeps(db, { docker });
+      const results = await Promise.allSettled([startSession(pushInput, deps), startSession(pushInput, deps)]);
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+      const refused = results.filter((r) => r.status === 'rejected');
+      expect(refused).toHaveLength(1);
+      expect((refused[0] as PromiseRejectedResult).reason).toBeInstanceOf(BranchBusyError);
+      expect(await db.select().from(sessions)).toHaveLength(1);
+      expect(calls.filter((call) => call.startsWith('create '))).toHaveLength(1);
+    }));
+
+  it('unique index violation maps to BranchBusyError (a holder the pre-check could not see yet)', () =>
+    withTestDb(async ({ db, url }) => {
+      // A writer that skips the capacity lock: its row is still uncommitted while startSession pre-checks,
+      // so only the partial unique index can catch the clash.
+      const other = postgres(url, { max: 1, onnotice: () => {} });
+      const watcher = postgres(url, { max: 1, onnotice: () => {} });
+      const holder = '0b5c2a3e-1f2d-4c5b-8a9e-0123456789ab';
+      try {
+        let attempt: Promise<unknown> | undefined;
+        await other.begin(async (sql) => {
+          await sql`insert into sessions (id, repo_full_name, base_branch, work_branch, default_branch, status, secret_hash, delivery_mode)
+            values (${holder}, 'acme/widgets', 'main', 'main', 'main', 'working', ${'0'.repeat(64)}, 'push')`;
+          attempt = startSession(pushInput, testDeps(db)).catch((e: unknown) => e);
+          // Commit only once startSession's insert is waiting on the uncommitted row.
+          const deadline = Date.now() + 10_000;
+          for (;;) {
+            const [row] = await watcher<{ n: number }[]>`select count(*)::int as n from pg_stat_activity
+              where wait_event_type = 'Lock' and query ilike 'insert into "sessions"%'`;
+            if ((row?.n ?? 0) > 0) break;
+            if (Date.now() > deadline) throw new Error('startSession never waited on the unique index');
+            await new Promise((r) => setTimeout(r, 50));
+          }
+        });
+        const refused = await attempt;
+        expect(refused).toBeInstanceOf(BranchBusyError);
+        expect((refused as Error).message).toBe('Session 0b5c is already working on main. Stop it first.');
+        const pushRows = await db.select({ id: sessions.id }).from(sessions).where(eq(sessions.deliveryMode, 'push'));
+        expect(pushRows.map((row) => row.id)).toEqual([holder]);
+      } finally {
+        await Promise.all([other.end(), watcher.end()]);
+      }
     }));
 });

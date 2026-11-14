@@ -17,6 +17,7 @@ Env in (set by panel at container create):
 | `WORK_BRANCH` | branch to create |
 | `STARTING_TASK_B64` | optional, base64 UTF-8 starting task |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | commit identity |
+| `DELIVERY_MODE` | `pull_request` or `push`; `push` works directly on `WORK_BRANCH` (= `BASE_BRANCH`) and may push only it |
 | `SESSION_DOCKER` | `true` to start inner dockerd (Sysbox only) |
 | `CLAUDE_BIN` | optional override of the claude executable (tests use a stub) |
 

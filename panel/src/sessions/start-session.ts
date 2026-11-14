@@ -2,7 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type Docker from 'dockerode';
 import type { Tx } from '@/db/client';
-import { repoSettings, sessionProfiles, sessions } from '@/db/schema';
+import { repoSettings, sessionProfiles, sessions, type DeliveryMode } from '@/db/schema';
 import { dockerErrorDetail, dockerStatusCode } from '@/docker/docker-errors';
 import { parseRepoFullName } from '@/github/tokens';
 import type { HostStats } from '@/host/host-stats-types';
@@ -11,8 +11,12 @@ import { toTarStream } from '@/profiles/profile-archive';
 import { BASE_PROFILE, listProfiles } from '@/profiles/profile-catalog';
 import { hashSessionSecret } from '@/runner-api/session-auth';
 import {
+  assertBranchFree,
   assertCapacity,
   assertFreeDisk,
+  BranchBusyError,
+  findBranchHolder,
+  isBranchBusyViolation,
   lockCapacity,
   RUNNING_STATUSES,
   StartBlockedError,
@@ -30,9 +34,27 @@ export type StartSessionInput = {
   baseBranch: string;
   profiles: string[];
   startingTask: string | null;
+  deliveryMode: DeliveryMode;
 };
 
 const MAX_ID_ATTEMPTS = 16;
+
+/** Runs a write that may hit the one-live-push-session-per-branch index; the loser is told who holds the branch. */
+async function mapBranchBusy<T>(
+  deps: SessionDeps,
+  repoFullName: string,
+  branch: string,
+  write: Promise<T>,
+  excludeId?: string,
+): Promise<T> {
+  try {
+    return await write;
+  } catch (error) {
+    if (!isBranchBusyViolation(error)) throw error;
+    const holder = await findBranchHolder(deps.db, repoFullName, branch, excludeId);
+    throw holder ? new BranchBusyError(branch, holder) : error;
+  }
+}
 
 /** A fresh id whose short id no live session uses, so container, volume and branch names never collide. */
 async function pickSessionId(tx: Tx): Promise<string> {
@@ -115,14 +137,17 @@ export async function startSession(
   if (merged.warnings.length > 0) console.warn(`[sessions] config warnings: ${merged.warnings.join('; ')}`);
 
   const secret = randomBytes(32).toString('base64url');
-  const { sessionId, workBranch, limits } = await deps.db.transaction(async (tx) => {
+  const { deliveryMode } = input;
+  // Push mode works on the base branch itself, so that is the branch only one live session may hold.
+  const startedRow = deps.db.transaction(async (tx) => {
     const { limits, running } = await lockCapacity(tx);
     assertCapacity(running, limits.maxRunning);
     assertFreeDisk(stats, limits.minFreeDiskGb);
     if (!sysbox) throw new SysboxMissingError();
+    if (deliveryMode === 'push') await assertBranchFree(tx, repoFullName, baseBranch);
 
     const sessionId = await pickSessionId(tx);
-    const workBranch = workBranchName(startingTask, sessionId);
+    const workBranch = deliveryMode === 'push' ? baseBranch : workBranchName(startingTask, sessionId);
     await tx.insert(sessions).values({
       id: sessionId,
       repoFullName,
@@ -130,6 +155,7 @@ export async function startSession(
       workBranch,
       defaultBranch,
       startingTask,
+      deliveryMode,
       status: 'starting',
       secretHash: hashSessionSecret(secret),
     });
@@ -141,6 +167,7 @@ export async function startSession(
       .onConflictDoUpdate({ target: repoSettings.repoFullName, set: { defaultProfiles } });
     return { sessionId, workBranch, limits };
   });
+  const { sessionId, workBranch, limits } = await mapBranchBusy(deps, repoFullName, baseBranch, startedRow);
   deps.eventBus.publish({ kind: 'session', sessionId, status: 'starting' });
 
   const spec = buildContainerSpec({
@@ -161,6 +188,7 @@ export async function startSession(
     memoryGb: limits.memoryGbPerSession,
     diskGb: limits.diskGbPerSession,
     storageOptSupported,
+    deliveryMode,
   });
 
   let containerId: string | null = null;
@@ -246,18 +274,22 @@ export async function restartSession(id: string, deps: SessionDeps = sharedSessi
   const row = await loadLiveSession(deps.db, id);
   if (!row.containerId) throw new StartBlockedError('This session has no container to restart.');
   await assertContainerNetworksSafe(deps, row.containerId);
-  const { wasRunning, remoteControlUrl } = await deps.db.transaction(async (tx) => {
+  const restarted = deps.db.transaction(async (tx) => {
     const { limits, running } = await lockCapacity(tx);
     const [current] = await tx.select().from(sessions).where(eq(sessions.id, row.id)).for('update');
     if (!current || current.deletedAt) throw new StartBlockedError('This session was deleted.');
     const isRunning = (RUNNING_STATUSES as readonly string[]).includes(current.status);
     if (!isRunning) assertCapacity(running, limits.maxRunning);
+    if (!isRunning && current.deliveryMode === 'push') {
+      await assertBranchFree(tx, current.repoFullName, current.workBranch, current.id);
+    }
     await tx
       .update(sessions)
       .set({ status: 'starting', statusDetail: null, endedAt: null, remoteControlUrl: null })
       .where(eq(sessions.id, row.id));
     return { wasRunning: isRunning, remoteControlUrl: current.remoteControlUrl };
   });
+  const { wasRunning, remoteControlUrl } = await mapBranchBusy(deps, row.repoFullName, row.workBranch, restarted, row.id);
   deps.eventBus.publish({ kind: 'session', sessionId: row.id, status: 'starting' });
 
   const container = deps.docker.getContainer(row.containerId);

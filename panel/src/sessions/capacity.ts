@@ -1,8 +1,9 @@
-import { and, count, inArray, isNull, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { Db, Tx } from '@/db/client';
 import { sessions } from '@/db/schema';
 import type { HostStats } from '@/host/host-stats-types';
 import { RUNNING_STATUSES } from '@/sessions/running-statuses';
+import { sessionShortId } from '@/sessions/work-branch';
 import { readSettings, type Settings } from '@/settings/settings-store';
 
 const GB = 1024 ** 3;
@@ -48,6 +49,14 @@ export class SysboxCheckFailedError extends StartBlockedError {
   }
 }
 
+/** A push session already holds the branch; only one live session may write to it at a time. */
+export class BranchBusyError extends StartBlockedError {
+  override name = 'BranchBusyError';
+  constructor(branch: string, sessionId: string) {
+    super(`Session ${sessionShortId(sessionId)} is already working on ${branch}. Stop it first.`);
+  }
+}
+
 export function assertCapacity(running: number, maxRunning: number): void {
   if (running >= maxRunning) throw new CapacityError(maxRunning);
 }
@@ -84,4 +93,51 @@ export async function lockCapacity(tx: Tx): Promise<{ limits: SessionLimits; run
   await takeCapacityLock(tx);
   const [limits, running] = await Promise.all([readSettings(tx), countRunningSessions(tx)]);
   return { limits, running };
+}
+
+/** The live push session working on this repo+branch, if any (optionally ignoring one session). */
+export async function findBranchHolder(
+  conn: Db | Tx,
+  repoFullName: string,
+  branch: string,
+  excludeId?: string,
+): Promise<string | null> {
+  const [holder] = await conn
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(
+      and(
+        eq(sessions.repoFullName, repoFullName),
+        eq(sessions.workBranch, branch),
+        eq(sessions.deliveryMode, 'push'),
+        inArray(sessions.status, [...RUNNING_STATUSES]),
+        isNull(sessions.deletedAt),
+        excludeId ? ne(sessions.id, excludeId) : undefined,
+      ),
+    )
+    .limit(1);
+  return holder?.id ?? null;
+}
+
+/** Refuses a push session while another live one works on the same branch. Call after `lockCapacity`. */
+export async function assertBranchFree(tx: Tx, repoFullName: string, branch: string, excludeId?: string): Promise<void> {
+  const holder = await findBranchHolder(tx, repoFullName, branch, excludeId);
+  if (holder) throw new BranchBusyError(branch, holder);
+}
+
+const LIVE_PUSH_BRANCH_INDEX = 'sessions_live_push_branch_uidx';
+
+/** True for the unique violation on the one-live-push-session-per-branch index (drizzle wraps the driver error). */
+export function isBranchBusyViolation(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < 4; depth += 1) {
+    const { code, constraint_name: constraint, cause } = current as {
+      code?: string;
+      constraint_name?: string;
+      cause?: unknown;
+    };
+    if (code === '23505' && constraint === LIVE_PUSH_BRANCH_INDEX) return true;
+    current = cause;
+  }
+  return false;
 }

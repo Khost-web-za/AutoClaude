@@ -37,8 +37,12 @@ export default async function SessionLayout({ children, params }: SessionRoutePa
         description={
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             <code className="font-mono break-all text-accent-text">{session.workBranch}</code>
-            <span>off</span>
-            <code className="font-mono break-all text-surface-foreground">{session.baseBranch}</code>
+            {session.workBranch !== session.baseBranch && (
+              <>
+                <span>off</span>
+                <code className="font-mono break-all text-surface-foreground">{session.baseBranch}</code>
+              </>
+            )}
             <span aria-hidden>·</span>
             <span>started {formatAgo(session.createdAt, new Date())}</span>
           </p>

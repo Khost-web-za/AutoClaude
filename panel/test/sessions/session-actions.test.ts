@@ -12,6 +12,7 @@ const deleteSession = vi.fn();
 const refreshGitState = vi.fn();
 const assertRepoAccessible = vi.fn();
 const listProfiles = vi.fn();
+const readRepoSettings = vi.fn();
 
 vi.mock('@/auth/require-owner', () => ({ requireOwner }));
 vi.mock('next/cache', () => ({ revalidatePath }));
@@ -27,12 +28,13 @@ vi.mock('@/repos/repo-access', async (importOriginal) => ({
   ...(await importOriginal<typeof RepoAccessModule>()),
   assertRepoAccessible,
 }));
+vi.mock('@/repos/repo-settings-store', () => ({ readRepoSettings }));
 vi.mock('@/profiles/profile-catalog', async (importOriginal) => ({
   ...(await importOriginal<typeof CatalogModule>()),
   listProfiles,
 }));
 
-const { CapacityError, InsufficientDiskError, SysboxMissingError } = await import('@/sessions/capacity');
+const { BranchBusyError, CapacityError, InsufficientDiskError, SysboxMissingError } = await import('@/sessions/capacity');
 const { DeleteNeedsConfirmationError } = await import('@/sessions/delete-session');
 const { SessionNotFoundError } = await import('@/sessions/session-record');
 const { StackDiscoveryError } = await import('@/docker/self-discovery');
@@ -50,6 +52,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   assertRepoAccessible.mockResolvedValue({ fullName: 'Acme/Widgets', private: true, defaultBranch: 'main', pushedAt: null });
   listProfiles.mockResolvedValue({ profiles: ['base', 'frontend'].map(profile), warnings: [] });
+  readRepoSettings.mockResolvedValue({ defaultBaseBranch: null, defaultProfiles: [], deliveryMode: 'pull_request' });
   startSession.mockResolvedValue({ sessionId: SESSION_ID });
 });
 
@@ -62,8 +65,15 @@ describe('startSessionAction', () => {
 
   it('starts with the canonical repository name and answers with the session id', async () => {
     expect(await startSessionAction(request)).toEqual({ ok: true, sessionId: SESSION_ID });
-    expect(startSession).toHaveBeenCalledWith({ ...request, repoFullName: 'Acme/Widgets' });
+    expect(startSession).toHaveBeenCalledWith({ ...request, repoFullName: 'Acme/Widgets', deliveryMode: 'pull_request' });
+    expect(readRepoSettings).toHaveBeenCalledWith('Acme/Widgets');
     expect(revalidatePath).toHaveBeenCalled();
+  });
+
+  it('maps BranchBusyError to reason blocked with its message', async () => {
+    const busy = new BranchBusyError('main', SESSION_ID);
+    startSession.mockRejectedValueOnce(busy);
+    expect(await startSessionAction(request)).toEqual({ ok: false, reason: 'blocked', message: busy.message });
   });
 
   it('maps CapacityError to reason capacity', async () => {

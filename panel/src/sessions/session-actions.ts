@@ -8,6 +8,7 @@ import { RepoNotAccessibleError } from '@/github/repos';
 import { UnknownProfileError } from '@/profiles/merge-plan';
 import { listProfiles } from '@/profiles/profile-catalog';
 import { assertRepoAccessible, repoAccessFailure } from '@/repos/repo-access';
+import { readRepoSettings } from '@/repos/repo-settings-store';
 import { CapacityError, InsufficientDiskError, StartBlockedError, SysboxCheckFailedError, SysboxMissingError } from './capacity';
 import { deleteSession, DeleteNeedsConfirmationError } from './delete-session';
 import { refreshGitState } from './git-state';
@@ -73,7 +74,11 @@ export async function startSessionAction(request: unknown): Promise<StartSession
   }
   let validation;
   try {
-    validation = await validateNewSession(request, { profiles: catalog.profiles, resolveRepo: assertRepoAccessible });
+    validation = await validateNewSession(request, {
+      profiles: catalog.profiles,
+      resolveRepo: assertRepoAccessible,
+      readDeliveryMode: (name) => readRepoSettings(name).then((settings) => settings.deliveryMode),
+    });
   } catch (error) {
     // validateNewSession only throws what GitHub threw (an outage); "not accessible" is a field error.
     return { ok: false, reason: 'unavailable', message: repoAccessFailure(error) };

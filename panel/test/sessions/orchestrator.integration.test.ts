@@ -136,7 +136,13 @@ describe.skipIf(!enabled)('session orchestrator against local Docker (runc, stub
             resolveRepo: async (fullName) => ({ fullName: fullName.trim(), defaultBranch: 'main' }),
             eventBus: { publish: () => {} },
           };
-          const input = { repoFullName: REPO, baseBranch: 'main', profiles: ['frontend'], startingTask: 'Fix it 🚀' };
+          const input = {
+            repoFullName: REPO,
+            baseBranch: 'main',
+            profiles: ['frontend'],
+            startingTask: 'Fix it 🚀',
+            deliveryMode: 'pull_request' as const,
+          };
 
           // start → starting, then working via the runner's events
           const { sessionId: id } = await startSession(input, deps);

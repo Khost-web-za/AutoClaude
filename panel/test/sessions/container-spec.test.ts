@@ -27,6 +27,7 @@ const input = (overrides: Partial<ContainerSpecInput> = {}): ContainerSpecInput 
   memoryGb: 8,
   diskGb: 40,
   storageOptSupported: false,
+  deliveryMode: 'pull_request',
   ...overrides,
 });
 
@@ -62,6 +63,7 @@ describe('buildContainerSpec', () => {
       GIT_AUTHOR_NAME: 'Octo Cat',
       GIT_AUTHOR_EMAIL: '1+octo@users.noreply.github.com',
       SESSION_DOCKER: 'true',
+      DELIVERY_MODE: 'pull_request',
     });
   });
 
@@ -70,6 +72,11 @@ describe('buildContainerSpec', () => {
     expect(env).not.toHaveProperty('REPO_URL');
     expect(env).not.toHaveProperty('SESSION_DOCKER');
     expect(env).not.toHaveProperty('STARTING_TASK_B64');
+  });
+
+  it('passes the delivery mode', () => {
+    expect(envOf(buildContainerSpec(input())).DELIVERY_MODE).toBe('pull_request');
+    expect(envOf(buildContainerSpec(input({ deliveryMode: 'push', workBranch: 'develop' }))).DELIVERY_MODE).toBe('push');
   });
 
   it('starting task base64 round-trips emoji, quotes and newlines', () => {

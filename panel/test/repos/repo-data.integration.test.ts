@@ -32,12 +32,17 @@ describe('repository data', () => {
 
   it('reads empty defaults, then upserts settings', () =>
     withTestDb(async ({ db }) => {
-      expect(await readRepoSettings('Acme/Widgets', db)).toEqual({ defaultBaseBranch: null, defaultProfiles: [] });
+      expect(await readRepoSettings('Acme/Widgets', db)).toEqual({
+        defaultBaseBranch: null,
+        defaultProfiles: [],
+        deliveryMode: 'pull_request',
+      });
       await saveRepoSettings('Acme/Widgets', { defaultBaseBranch: 'develop', defaultProfiles: ['frontend'] }, db);
       await saveRepoSettings('Acme/Widgets', { defaultBaseBranch: null, defaultProfiles: ['seo', 'frontend'] }, db);
       expect(await readRepoSettings('Acme/Widgets', db)).toEqual({
         defaultBaseBranch: null,
         defaultProfiles: ['seo', 'frontend'],
+        deliveryMode: 'pull_request',
       });
     }));
 });
