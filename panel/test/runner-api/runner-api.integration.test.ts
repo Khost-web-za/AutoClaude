@@ -111,6 +111,14 @@ describe('runner api', () => {
       expect(seen.some((e) => e.kind === 'session_event' && e.type === 'hook')).toBe(true);
     }));
 
+  it('204 on a workspace_sync event', () =>
+    setup(async ({ call }) => {
+      const res = await call('/api/runner/events', {
+        body: event('workspace_sync', { status: 'ok', summary: 'up to date', source: 'startup' }),
+      });
+      expect(res.status).toBe(204);
+    }));
+
   it('400 on invalid body, 404 on unknown route', () =>
     setup(async ({ call }) => {
       expect((await call('/api/runner/events', { body: { type: 'bogus', data: {}, at: 'x' } })).status).toBe(400);

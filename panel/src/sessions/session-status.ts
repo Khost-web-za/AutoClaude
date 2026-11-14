@@ -1,6 +1,6 @@
 import type { SessionStatus } from '@/db/schema';
 
-export type RunnerEventType = 'boot_step' | 'remote_control_url' | 'hook' | 'claude_exited';
+export type RunnerEventType = 'boot_step' | 'remote_control_url' | 'hook' | 'workspace_sync' | 'claude_exited';
 
 export type RunnerEvent = {
   type: RunnerEventType;

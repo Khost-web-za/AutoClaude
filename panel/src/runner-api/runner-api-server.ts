@@ -23,7 +23,7 @@ export type RunnerApiDeps = {
 };
 
 const eventBody = z.object({
-  type: z.enum(['boot_step', 'remote_control_url', 'hook', 'claude_exited']),
+  type: z.enum(['boot_step', 'remote_control_url', 'hook', 'workspace_sync', 'claude_exited']),
   data: z.record(z.string(), z.unknown()).default({}),
   at: z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'must be an ISO 8601 timestamp'),
 });

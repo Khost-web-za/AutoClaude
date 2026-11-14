@@ -21,6 +21,7 @@ const LIVE_ONLY: Record<string, string> = {
   boot_step: 'Boot progress',
   remote_control_url: 'Connected to Claude (Remote Control ready)',
   hook: 'Claude activity',
+  workspace_sync: 'Workspace sync',
   claude_exited: 'Claude exited',
 };
 
@@ -39,6 +40,7 @@ export function describeEvent(type: string, data: Record<string, unknown> | null
     case 'hook':
       switch (d.event) {
         case 'SessionStart':
+          if (d.source === 'clear') return { text: 'Conversation cleared', tone: 'default' };
           return { text: 'Claude session started', tone: 'default' };
         case 'UserPromptSubmit':
           return { text: 'You sent a message', tone: 'default' };
@@ -49,6 +51,12 @@ export function describeEvent(type: string, data: Record<string, unknown> | null
         default:
           return { text: `Hook ${str(d.event) ?? ''}`.trim(), tone: 'default' };
       }
+    case 'workspace_sync': {
+      const summary = str(d.summary);
+      if (d.status === 'failed') return { text: clip(`Sync failed${summary ? `: ${summary}` : ''}`), tone: 'problem' };
+      if (d.status === 'skipped') return { text: clip(`Sync skipped${summary ? `: ${summary}` : ''}`), tone: 'default' };
+      return { text: clip(`Synced with the remote${summary ? `: ${summary}` : ''}`), tone: 'default' };
+    }
     case 'claude_exited': {
       const code = typeof d.code === 'number' ? ` (code ${d.code})` : '';
       if (d.restarting === true) return { text: `Claude exited${code}; restarting`, tone: 'default' };
