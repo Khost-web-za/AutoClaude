@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireOwner } from '@/auth/require-owner';
+import { DEFAULT_RESUME_MESSAGE } from '@/db/schema';
 import type { FormState } from '@/feedback/form-state';
 import { getPanelEnv } from '@/env/panel-env';
 import { BASE_PROFILE, listProfiles } from '@/profiles/profile-catalog';
@@ -23,7 +24,9 @@ export async function updateRepoSettings(repo: string, _previous: FormState, for
   const branch = optionalBranchNameSchema.safeParse(formData.get('defaultBaseBranch') ?? '');
   const deliveryMode = deliveryModeSchema.safeParse(formData.get('deliveryMode'));
   const autoResume = formData.get('autoResume') === 'on';
-  const resumeMessage = resumeMessageSchema.safeParse(formData.get('resumeMessage') ?? '');
+  // With the switch off the message field is hidden, so an invalid one could never be fixed there: use the default.
+  const typedMessage = resumeMessageSchema.safeParse(formData.get('resumeMessage') ?? '');
+  const resumeMessage = typedMessage.success || autoResume ? typedMessage : resumeMessageSchema.safeParse(DEFAULT_RESUME_MESSAGE);
   const picked = formData.getAll('profiles').filter((value): value is string => typeof value === 'string');
   const [repoResult, catalog] = await Promise.all([
     assertRepoAccessible(repo).then(

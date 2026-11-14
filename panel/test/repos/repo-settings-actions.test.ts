@@ -136,6 +136,19 @@ describe('updateRepoSettings', () => {
     expect(saveRepoSettings).toHaveBeenCalledTimes(1);
   });
 
+  it('with auto-resume off, a hidden empty message falls back to the default instead of an unreachable field error', async () => {
+    for (const message of ['', 'x'.repeat(501)]) {
+      expect(await updateRepoSettings('acme/widgets', { status: 'idle' }, form('', [], 'pull_request', { message }))).toMatchObject({
+        status: 'success',
+      });
+    }
+    expect(saveRepoSettings).toHaveBeenCalledTimes(2);
+    expect(saveRepoSettings).toHaveBeenLastCalledWith(
+      'Acme/Widgets',
+      expect.objectContaining({ autoResume: false, resumeMessage: 'Please continue where you left off.' }),
+    );
+  });
+
   it('answers a database failure with an error instead of throwing', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     saveRepoSettings.mockRejectedValueOnce(new Error('connection refused'));
