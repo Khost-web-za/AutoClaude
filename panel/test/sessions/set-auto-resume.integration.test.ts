@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { sessions } from '@/db/schema';
 import { withTestDb } from '@/db/testing';
 import { SessionNotFoundError } from '@/sessions/session-record';
@@ -12,7 +12,7 @@ describe('setAutoResume', () => {
   it('turning it on leaves the limit state alone', () =>
     withTestDb(async ({ db }) => {
       const [row] = await db.insert(sessions).values({ ...base, limitState: 'limited', limitResetsAt: resetsAt }).returning();
-      await setAutoResume(row!.id, true, { db });
+      await setAutoResume(row!.id, true, { db, eventBus: { publish: () => {} } });
       const [after] = await db.select().from(sessions).where(eq(sessions.id, row!.id));
       expect(after).toMatchObject({ autoResume: true, limitState: 'limited', limitResetsAt: resetsAt });
     }));
@@ -31,7 +31,9 @@ describe('setAutoResume', () => {
           limitDetail: 'Waiting',
         })
         .returning();
-      await setAutoResume(row!.id, false, { db });
+      const publish = vi.fn();
+      await setAutoResume(row!.id, false, { db, eventBus: { publish } });
+      expect(publish).toHaveBeenCalledWith({ kind: 'session_limit', sessionId: row!.id, limitState: 'none', resumeAt: null, detail: null });
       const [after] = await db.select().from(sessions).where(eq(sessions.id, row!.id));
       expect(after).toMatchObject({
         autoResume: false,
@@ -45,8 +47,9 @@ describe('setAutoResume', () => {
 
   it('refuses an unknown or deleted session', () =>
     withTestDb(async ({ db }) => {
-      await expect(setAutoResume('0b5c2a3e-1f2d-4c5b-8a9e-0123456789ab', true, { db })).rejects.toBeInstanceOf(SessionNotFoundError);
+      const deps = { db, eventBus: { publish: () => {} } };
+      await expect(setAutoResume('0b5c2a3e-1f2d-4c5b-8a9e-0123456789ab', true, deps)).rejects.toBeInstanceOf(SessionNotFoundError);
       const [row] = await db.insert(sessions).values({ ...base, deletedAt: new Date() }).returning();
-      await expect(setAutoResume(row!.id, true, { db })).rejects.toBeInstanceOf(SessionNotFoundError);
+      await expect(setAutoResume(row!.id, true, deps)).rejects.toBeInstanceOf(SessionNotFoundError);
     }));
 });
