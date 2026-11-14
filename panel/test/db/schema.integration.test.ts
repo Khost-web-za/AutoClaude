@@ -66,6 +66,35 @@ describe('database schema', () => {
       expect(await db.select().from(sessionProfiles)).toHaveLength(0);
     }));
 
+  describe('one live push session per branch', () => {
+    const push = { ...baseSession, deliveryMode: 'push' as const };
+    const code = (e: { cause?: { code?: string } }) => e.cause?.code;
+
+    it('rejects a second live push session on one branch', () =>
+      withTestDb(async ({ db }) => {
+        await db.insert(sessions).values({ ...push, status: 'working' });
+        const error = await db
+          .insert(sessions)
+          .values({ ...push, status: 'working' })
+          .then(
+            () => null,
+            (e: { cause?: { code?: string } }) => e,
+          );
+        expect(error && code(error)).toBe('23505');
+      }));
+
+    it('allows it once the first is stopped', () =>
+      withTestDb(async ({ db }) => {
+        await db.insert(sessions).values({ ...push, status: 'stopped' });
+        await expect(db.insert(sessions).values({ ...push, status: 'working' })).resolves.toBeDefined();
+      }));
+
+    it('does not constrain pull_request sessions', () =>
+      withTestDb(async ({ db }) => {
+        await db.insert(sessions).values({ ...baseSession, status: 'working' });
+        await expect(db.insert(sessions).values({ ...baseSession, status: 'working' })).resolves.toBeDefined();
+      }));
+  });
 });
 
 describe('paginate', () => {

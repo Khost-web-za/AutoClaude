@@ -1,0 +1,4 @@
+CREATE TYPE "public"."session_delivery" AS ENUM('pull_request', 'push');--> statement-breakpoint
+ALTER TABLE "repo_settings" ADD COLUMN "delivery_mode" "session_delivery" DEFAULT 'pull_request' NOT NULL;--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN "delivery_mode" "session_delivery" DEFAULT 'pull_request' NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "sessions_live_push_branch_uidx" ON "sessions" USING btree ("repo_full_name","work_branch") WHERE "sessions"."delivery_mode" = 'push' and "sessions"."status" in ('starting','working','waiting','idle') and "sessions"."deleted_at" is null;
