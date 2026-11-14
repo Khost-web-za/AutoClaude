@@ -1,0 +1,8 @@
+# synthetic: written from Claude Code's on-screen strings, not captured from a live session
+
+  ⏺ Done. All tests pass.
+
+────────────────────────────────────────────────────────────────────────
+> 
+────────────────────────────────────────────────────────────────────────
+  ? for shortcuts

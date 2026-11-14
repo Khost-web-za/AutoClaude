@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { SessionDocker } from '@/sessions/session-deps';
-import { demuxDockerLog, readSessionLogs, redactLogLines, stripAnsi } from '@/sessions/session-logs';
+import { demuxDockerLog, readSessionLogs, redactLogLines } from '@/sessions/session-logs';
+import { stripAnsi } from '@/claude/ansi';
 
 const frame = (stream: 1 | 2, text: string) => {
   const body = Buffer.from(text, 'utf8');

@@ -3,6 +3,7 @@ import { Writable, type Duplex } from 'node:stream';
 import type { Container } from 'dockerode';
 import { docker } from '@/docker/docker-client';
 import { discoverStack } from '@/docker/self-discovery';
+import { stripAnsi } from './ansi';
 import { credentialsVolume, parseCredentials, type CredentialsVolume } from './credentials-volume';
 
 const LOGIN_LABEL = 'claudecloud.role';
@@ -21,9 +22,7 @@ const MAX_BUFFER = 64 * 1024;
 const LOGIN_URL = /https:\/\/claude\.(?:com|ai)\/[^\s"'<>]*oauth\/authorize\?[^\s"'<>]+/;
 const CODE_PROMPT = /Paste code here/i;
  
-const ANSI = /\u001b(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007\u001b]*(?:\u0007|\u001b\\)|[@-Z\\-_])/g;
-
-export const stripAnsi = (text: string): string => text.replace(ANSI, '');
+export { stripAnsi };
 
 /** First login URL in raw TTY output; rejoins a URL the terminal wrapped across lines. */
 export function extractLoginUrl(raw: string): string | null {

@@ -1,0 +1,11 @@
+# synthetic: written from Claude Code's on-screen strings, not captured from a live session
+────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   npm install left-pad
+   Install a dependency
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don't ask again for npm install commands in /workspace
+   3. No, and tell Claude what to do differently (esc)

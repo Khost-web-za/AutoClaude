@@ -1,18 +1,12 @@
 import { dockerStatusCode } from '@/docker/docker-errors';
 import { secretStore as sharedSecretStore, type SecretStore } from '@/secret-store/secret-store';
 import { repoSecretPrefix } from '@/repos/secret-schemas';
+import { stripAnsi } from '@/claude/ansi';
 import { sharedSessionDeps, type SessionDocker } from './session-deps';
 
 export const LOG_TAIL_LINES = 500;
 export const REDACTED = '••••';
 const LOG_TIMEOUT_MS = 10_000;
-
-// CSI (colours, cursor moves), OSC (titles, links; BEL or ST terminated) and single-character escapes.
-const ANSI = /\u001b\[[0-?]*[ -/]*[@-~]|\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)|\u001b[@-Z\\-_]|\u009b[0-?]*[ -/]*[@-~]/g;
-
-export function stripAnsi(text: string): string {
-  return text.replace(ANSI, '');
-}
 
 /**
  * A Docker log body as lines. Containers without a TTY send 8-byte framed stdout/stderr chunks

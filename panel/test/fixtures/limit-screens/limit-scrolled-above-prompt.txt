@@ -1,0 +1,11 @@
+# synthetic: written from Claude Code's on-screen strings, not captured from a live session
+  ⎿  5-hour limit reached ∙ resets 3pm
+
+> Please continue where you left off.
+
+  ⏺ Continuing with the refactor.
+
+────────────────────────────────────────────────────────────────────────
+> 
+────────────────────────────────────────────────────────────────────────
+  ? for shortcuts
