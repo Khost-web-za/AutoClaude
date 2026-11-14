@@ -102,3 +102,23 @@ test("cli prints nothing for allowed commands and other tools", async () => {
     assert.equal(res.stdout, "");
   }
 });
+
+const OWN_MAIN = { ownBranch: "main" };
+
+test("push mode on the default branch allows pushing the session's own branch", () => {
+  for (const cmd of ["git push", "git push origin main", "git push -u origin HEAD", "git pull --rebase --autostash && git push"]) {
+    assert.equal(classifyCommand(cmd, "main", "main", OWN_MAIN).decision, "allow", cmd);
+  }
+});
+
+test("push mode still asks for force, delete and all/mirror pushes", () => {
+  for (const cmd of ["git push -f", "git push --force-with-lease", "git push origin +main", "git push origin --delete main", "git push --all origin"]) {
+    assert.equal(classifyCommand(cmd, "main", "main", OWN_MAIN).decision, "ask", cmd);
+  }
+});
+
+test("push mode on a non-default branch allows its own branch but asks for the default", () => {
+  const opts = { ownBranch: "dev" };
+  assert.equal(classifyCommand("git push origin dev", "main", "dev", opts).decision, "allow");
+  assert.equal(classifyCommand("git push origin dev:main", "main", "dev", opts).decision, "ask");
+});

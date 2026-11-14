@@ -63,7 +63,7 @@ const PUSH_OPTS_WITH_VALUE = new Set(["-o", "--push-option", "--repo", "--receiv
 
 const stripHeads = (ref) => ref.replace(/^refs\/heads\//, "");
 
-function classifyPush(args, defaultBranch, currentBranch) {
+function classifyPush(args, defaultBranch, currentBranch, ownBranch) {
   const positional = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -94,7 +94,7 @@ function classifyPush(args, defaultBranch, currentBranch) {
   }
 
   const refspecs = positional.slice(1);
-  const onDefault = currentBranch === defaultBranch;
+  const onDefault = currentBranch === defaultBranch && currentBranch !== ownBranch;
   if (refspecs.length === 0) {
     return onDefault
       ? { decision: "ask", reason: `This pushes the current branch, which is the default branch ${defaultBranch}.` }
@@ -106,21 +106,21 @@ function classifyPush(args, defaultBranch, currentBranch) {
     if (spec.startsWith(":")) return { decision: "ask", reason: "Deleting a remote branch requires the user's confirmation." };
     const [src, dst] = spec.includes(":") ? spec.split(":", 2) : [spec, spec];
     const target = stripHeads(dst === "HEAD" || (src === "HEAD" && dst === spec) ? currentBranch ?? "" : dst);
-    if (target === defaultBranch) {
+    if (target === defaultBranch && target !== ownBranch) {
       return { decision: "ask", reason: `Pushing to the default branch ${defaultBranch} requires the user's confirmation.` };
     }
   }
   return { decision: "allow" };
 }
 
-function classifyGit(args, defaultBranch, currentBranch) {
+function classifyGit(args, defaultBranch, currentBranch, ownBranch) {
   let i = 0;
   while (i < args.length && args[i].startsWith("-")) {
     const name = args[i].split("=")[0];
     i += GIT_OPTS_WITH_VALUE.has(name) && !args[i].includes("=") ? 2 : 1;
   }
   if (args[i] !== "push") return { decision: "allow" };
-  return classifyPush(args.slice(i + 1), defaultBranch, currentBranch);
+  return classifyPush(args.slice(i + 1), defaultBranch, currentBranch, ownBranch);
 }
 
 function classifyGh(args) {
@@ -130,13 +130,14 @@ function classifyGh(args) {
   return { decision: "allow" };
 }
 
-export function classifyCommand(command, defaultBranch, currentBranch) {
+/** `ownBranch` (push-mode sessions) is exempt from the default-branch rule; force/delete/all rules still apply. */
+export function classifyCommand(command, defaultBranch, currentBranch, { ownBranch } = {}) {
   for (const words of tokenize(command)) {
     let i = 0;
     while (i < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i])) i++;
     const [program, ...args] = words.slice(i);
     let result = { decision: "allow" };
-    if (program === "git") result = classifyGit(args, defaultBranch, currentBranch);
+    if (program === "git") result = classifyGit(args, defaultBranch, currentBranch, ownBranch);
     else if (program === "gh") result = classifyGh(args);
     if (result.decision === "ask") return result;
   }

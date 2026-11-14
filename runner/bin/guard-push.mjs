@@ -25,7 +25,8 @@ try {
 const command = payload?.tool_input?.command;
 if (payload?.tool_name === "Bash" && typeof command === "string") {
   const defaultBranch = process.env.DEFAULT_BRANCH || "main";
-  const { decision, reason } = classifyCommand(command, defaultBranch, currentBranch(payload.cwd || process.cwd()));
+  const ownBranch = process.env.DELIVERY_MODE === "push" ? process.env.WORK_BRANCH || undefined : undefined;
+  const { decision, reason } = classifyCommand(command, defaultBranch, currentBranch(payload.cwd || process.cwd()), { ownBranch });
   if (decision === "ask") {
     process.stdout.write(
       JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: reason } }),
