@@ -14,7 +14,7 @@ const searchSchema = z.object({
 });
 
 export type RepoDefaults =
-  | { ok: true; fullName: string; baseBranch: string; profiles: string[]; deliveryMode: DeliveryMode }
+  | { ok: true; fullName: string; baseBranch: string; profiles: string[]; deliveryMode: DeliveryMode; autoResume: boolean }
   | { ok: false; message: string };
 
 /** New session's repository picker: one page (20) of repositories the App can see, searched by name. */
@@ -62,7 +62,7 @@ export async function searchBranchOptions(repo: unknown, query: unknown, page: u
 
 /**
  * What New session pre-fills for a repository: its remembered base branch (else GitHub's default branch),
- * its remembered profiles and its delivery mode.
+ * its remembered profiles, its delivery mode and its auto-resume setting.
  */
 export async function repoDefaultsAction(repo: unknown): Promise<RepoDefaults> {
   await requireOwner();
@@ -75,6 +75,7 @@ export async function repoDefaultsAction(repo: unknown): Promise<RepoDefaults> {
       baseBranch: settings.defaultBaseBranch ?? summary.defaultBranch,
       profiles: settings.defaultProfiles,
       deliveryMode: settings.deliveryMode,
+      autoResume: settings.autoResume,
     };
   } catch (error) {
     return { ok: false, message: repoAccessFailure(error) };

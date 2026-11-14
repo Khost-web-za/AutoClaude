@@ -21,6 +21,7 @@ const input = {
   profiles: ['frontend'],
   startingTask: 'Fix the bug',
   deliveryMode: 'pull_request' as const,
+  autoResume: false,
 };
 const pushInput = { ...input, deliveryMode: 'push' as const };
 const GB = 1024 ** 3;
@@ -82,6 +83,20 @@ describe('startSession bookkeeping', () => {
       await startSession(input, testDeps(db));
       const [defaults] = await db.select().from(repoSettings);
       expect(defaults).toMatchObject({ defaultProfiles: ['frontend'], deliveryMode: 'push' });
+    }));
+
+  it('copies the auto-resume choice onto the session', () =>
+    withTestDb(async ({ db }) => {
+      const { sessionId } = await startSession({ ...input, autoResume: true }, testDeps(db));
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId));
+      expect(row).toMatchObject({ autoResume: true, limitState: 'none', resumeAttempts: 0 });
+    }));
+
+  it('copies the auto-resume choice onto the session', () =>
+    withTestDb(async ({ db }) => {
+      const { sessionId } = await startSession({ ...input, autoResume: true }, testDeps(db));
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId));
+      expect(row).toMatchObject({ autoResume: true, limitState: 'none', resumeAttempts: 0 });
     }));
 
   it('a Docker failure marks the session failed with a detail and removes container and volume', () =>

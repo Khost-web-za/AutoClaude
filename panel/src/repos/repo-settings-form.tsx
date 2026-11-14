@@ -7,11 +7,13 @@ import { submitWithoutReset } from '@/feedback/form-submit';
 import { withToast } from '@/feedback/toast-host';
 import type { Profile } from '@/profiles/profile-catalog';
 import { ProfileCards } from '@/profiles/profile-cards';
+import { AutoResumeField } from '@/sessions/auto-resume-field';
 import { DeliveryModeField } from '@/sessions/delivery-mode-field';
+import { RESUME_MESSAGE_MAX } from './resume-message';
 import { SectionLabel } from '@/ui/section-label';
 import type { RepoSettings } from './repo-settings-store';
 
-/** Default base branch, delivery mode and default profiles for New session. Controlled, so the input stays put after a save or a rejection. */
+/** Default base branch, delivery mode, auto-resume and default profiles for New session. Controlled, so the input stays put after a save or a rejection. */
 export function RepoSettingsForm({
   settings,
   githubDefaultBranch,
@@ -27,6 +29,8 @@ export function RepoSettingsForm({
   const [branch, setBranch] = useState(settings.defaultBaseBranch ?? '');
   const [picked, setPicked] = useState<string[]>(settings.defaultProfiles);
   const [deliveryMode, setDeliveryMode] = useState(settings.deliveryMode);
+  const [autoResume, setAutoResume] = useState(settings.autoResume);
+  const [resumeMessage, setResumeMessage] = useState(settings.resumeMessage);
   const fieldErrors = state.status === 'error' ? state.fieldErrors : undefined;
 
   return (
@@ -56,6 +60,18 @@ export function RepoSettingsForm({
           onChange={setDeliveryMode}
           errorMessage={fieldErrors?.deliveryMode?.[0]}
         />
+        <AutoResumeField name="autoResume" isSelected={autoResume} onChange={setAutoResume} />
+        {autoResume ? (
+          <TextField name="resumeMessage" value={resumeMessage} onChange={setResumeMessage} className="flex max-w-md flex-col gap-2">
+            <Label>Resume message</Label>
+            <Input maxLength={RESUME_MESSAGE_MAX} autoComplete="off" className="min-h-11" />
+            <Description>Typed into the session when it resumes.</Description>
+            <FieldError />
+          </TextField>
+        ) : (
+          // Kept in the form so switching off does not forget the message.
+          <input type="hidden" name="resumeMessage" value={resumeMessage} />
+        )}
         <p className="text-sm text-muted">Pre-selected when you start a session on this repository.</p>
       </section>
 

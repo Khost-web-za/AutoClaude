@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import type { Db } from '@/db/client';
 import { paginate } from '@/db/pagination';
-import { sessionEvents, sessionProfiles, sessions, settings, usageCache } from '@/db/schema';
+import { repoSettings, sessionEvents, sessionProfiles, sessions, settings, usageCache } from '@/db/schema';
 import { withTestDb } from '@/db/testing';
 
 const baseSession = {
@@ -78,6 +78,34 @@ describe('database schema', () => {
 
       expect(await db.select().from(sessionEvents)).toHaveLength(0);
       expect(await db.select().from(sessionProfiles)).toHaveLength(0);
+    }));
+
+  it('defaults auto-resume off and the limit state to none', () =>
+    withTestDb(async ({ db }) => {
+      const [session] = await db.insert(sessions).values(baseSession).returning();
+      expect(session).toMatchObject({
+        autoResume: false,
+        limitState: 'none',
+        limitResetsAt: null,
+        resumeAttempts: 0,
+        resumeNextAt: null,
+        limitDetail: null,
+      });
+      const [defaults] = await db.insert(repoSettings).values({ repoFullName: 'acme/widgets' }).returning();
+      expect(defaults).toMatchObject({ autoResume: false, resumeMessage: 'Please continue where you left off.' });
+    }));
+
+  it('rejects an unknown limit state', () =>
+    withTestDb(async ({ db }) => {
+      const error = await db
+        .insert(sessions)
+        // @ts-expect-error not a limit_state value
+        .values({ ...baseSession, limitState: 'stuck' })
+        .then(
+          () => null,
+          (e: { cause?: { code?: string } }) => e,
+        );
+      expect(error?.cause?.code).toBe('22P02');
     }));
 
   describe('one live push session per branch', () => {

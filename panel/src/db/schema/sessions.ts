@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { bigint, index, jsonb, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from 'drizzle-orm/pg-core';
+import { bigint, boolean, index, integer, jsonb, pgEnum, pgTable, text, timestamp, uuid, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sessionDelivery } from './repo-settings';
 
 export const sessionStatus = pgEnum('session_status', [
@@ -10,6 +10,10 @@ export const sessionStatus = pgEnum('session_status', [
   'stopped',
   'failed',
 ]);
+
+export const limitState = pgEnum('limit_state', ['none', 'limited', 'resuming', 'failed']);
+
+export type LimitState = (typeof limitState.enumValues)[number];
 
 export type SessionStatus = (typeof sessionStatus.enumValues)[number];
 
@@ -38,6 +42,12 @@ export const sessions = pgTable(
     secretHash: text().notNull(),
     gitState: jsonb().$type<SessionGitState>(),
     diskBytes: bigint({ mode: 'number' }),
+    autoResume: boolean().notNull().default(false),
+    limitState: limitState().notNull().default('none'),
+    limitResetsAt: timestamp({ withTimezone: true }),
+    resumeAttempts: integer().notNull().default(0),
+    resumeNextAt: timestamp({ withTimezone: true }),
+    limitDetail: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp({ withTimezone: true }),
     endedAt: timestamp({ withTimezone: true }),
@@ -47,6 +57,9 @@ export const sessions = pgTable(
     index('sessions_status_idx').on(t.status),
     index('sessions_created_at_idx').on(t.createdAt.desc()),
     index('sessions_repo_full_name_created_at_idx').on(t.repoFullName, t.createdAt.desc()),
+    index('sessions_resume_next_at_idx')
+      .on(t.resumeNextAt)
+      .where(sql`${t.limitState} in ('limited','resuming')`),
     uniqueIndex('sessions_live_push_branch_uidx')
       .on(t.repoFullName, t.workBranch)
       .where(sql`${t.deliveryMode} = 'push' and ${t.status} in ('starting','working','waiting','idle') and ${t.deletedAt} is null`),

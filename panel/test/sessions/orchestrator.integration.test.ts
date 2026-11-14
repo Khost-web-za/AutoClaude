@@ -142,6 +142,7 @@ describe.skipIf(!enabled)('session orchestrator against local Docker (runc, stub
             profiles: ['frontend'],
             startingTask: 'Fix it 🚀',
             deliveryMode: 'pull_request' as const,
+            autoResume: false,
           };
 
           // start → starting, then working via the runner's events

@@ -20,11 +20,16 @@ const resolveRepo = vi.fn(async (fullName: string) => {
 });
 
 const valid = { repoFullName: 'acme/widgets', baseBranch: 'develop', profiles: ['frontend'], startingTask: 'Fix it' };
-const readDeliveryMode = vi.fn(async (_repoFullName: string): Promise<DeliveryMode> => 'pull_request');
+const readRepoDefaults = vi.fn(
+  async (_repoFullName: string): Promise<{ deliveryMode: DeliveryMode; autoResume: boolean }> => ({
+    deliveryMode: 'pull_request',
+    autoResume: false,
+  }),
+);
 
 describe('validateNewSession', () => {
   it('accepts a valid request and answers with the canonical repository name', async () => {
-    const result = await validateNewSession(valid, { profiles: catalog, resolveRepo, readDeliveryMode });
+    const result = await validateNewSession(valid, { profiles: catalog, resolveRepo, readRepoDefaults });
     expect(result).toEqual({
       ok: true,
       input: {
@@ -33,37 +38,38 @@ describe('validateNewSession', () => {
         profiles: ['frontend'],
         startingTask: 'Fix it',
         deliveryMode: 'pull_request',
+        autoResume: false,
       },
     });
   });
 
   it('an empty starting task is no task', async () => {
-    const result = await validateNewSession({ ...valid, startingTask: '   ' }, { profiles: catalog, resolveRepo, readDeliveryMode });
+    const result = await validateNewSession({ ...valid, startingTask: '   ' }, { profiles: catalog, resolveRepo, readRepoDefaults });
     expect(result).toMatchObject({ ok: true, input: { startingTask: null } });
   });
 
   it(`rejects a starting task over ${STARTING_TASK_MAX} characters`, async () => {
     expect(STARTING_TASK_MAX).toBe(8000);
-    const ok = await validateNewSession({ ...valid, startingTask: 'x'.repeat(8000) }, { profiles: catalog, resolveRepo, readDeliveryMode });
+    const ok = await validateNewSession({ ...valid, startingTask: 'x'.repeat(8000) }, { profiles: catalog, resolveRepo, readRepoDefaults });
     expect(ok.ok).toBe(true);
-    const result = await validateNewSession({ ...valid, startingTask: 'x'.repeat(8001) }, { profiles: catalog, resolveRepo, readDeliveryMode });
+    const result = await validateNewSession({ ...valid, startingTask: 'x'.repeat(8001) }, { profiles: catalog, resolveRepo, readRepoDefaults });
     expect(result).toMatchObject({ ok: false, fieldErrors: { startingTask: [expect.any(String)] } });
   });
 
   it('rejects a profile that is not in the catalog', async () => {
-    const result = await validateNewSession({ ...valid, profiles: ['frontend', 'nope'] }, { profiles: catalog, resolveRepo, readDeliveryMode });
+    const result = await validateNewSession({ ...valid, profiles: ['frontend', 'nope'] }, { profiles: catalog, resolveRepo, readRepoDefaults });
     expect(result).toMatchObject({ ok: false, fieldErrors: { profiles: [expect.any(String)] } });
   });
 
   it('rejects a repository the GitHub App cannot see', async () => {
-    const result = await validateNewSession({ ...valid, repoFullName: 'other/thing' }, { profiles: catalog, resolveRepo, readDeliveryMode });
+    const result = await validateNewSession({ ...valid, repoFullName: 'other/thing' }, { profiles: catalog, resolveRepo, readRepoDefaults });
     expect(result).toMatchObject({ ok: false, fieldErrors: { repoFullName: [expect.any(String)] } });
   });
 
   it('rejects a malformed request before asking GitHub', async () => {
     resolveRepo.mockClear();
     for (const raw of [null, {}, { ...valid, repoFullName: '' }, { ...valid, baseBranch: '-x' }, { ...valid, profiles: 'base' }]) {
-      expect((await validateNewSession(raw, { profiles: catalog, resolveRepo, readDeliveryMode })).ok).toBe(false);
+      expect((await validateNewSession(raw, { profiles: catalog, resolveRepo, readRepoDefaults })).ok).toBe(false);
     }
     expect(resolveRepo).not.toHaveBeenCalled();
   });
@@ -72,31 +78,55 @@ describe('validateNewSession', () => {
     const outage = vi.fn(async () => {
       throw new Error('fetch failed');
     });
-    await expect(validateNewSession(valid, { profiles: catalog, resolveRepo: outage, readDeliveryMode })).rejects.toThrow('fetch failed');
+    await expect(validateNewSession(valid, { profiles: catalog, resolveRepo: outage, readRepoDefaults })).rejects.toThrow('fetch failed');
   });
 
   it("a request without a delivery mode uses the repository's default", async () => {
-    readDeliveryMode.mockResolvedValueOnce('push');
-    const result = await validateNewSession(valid, { profiles: catalog, resolveRepo, readDeliveryMode });
+    readRepoDefaults.mockResolvedValueOnce({ deliveryMode: 'push', autoResume: false });
+    const result = await validateNewSession(valid, { profiles: catalog, resolveRepo, readRepoDefaults });
     expect(result).toMatchObject({ ok: true, input: { deliveryMode: 'push' } });
-    expect(readDeliveryMode).toHaveBeenLastCalledWith('Acme/Widgets');
+    expect(readRepoDefaults).toHaveBeenLastCalledWith('Acme/Widgets');
   });
 
   it('an explicit delivery mode wins over the repository default', async () => {
-    readDeliveryMode.mockClear();
     const result = await validateNewSession(
       { ...valid, deliveryMode: 'push' },
-      { profiles: catalog, resolveRepo, readDeliveryMode },
+      { profiles: catalog, resolveRepo, readRepoDefaults },
     );
     expect(result).toMatchObject({ ok: true, input: { deliveryMode: 'push' } });
-    expect(readDeliveryMode).not.toHaveBeenCalled();
   });
 
   it('rejects an unknown delivery mode as a field error', async () => {
     const result = await validateNewSession(
       { ...valid, deliveryMode: 'force' },
-      { profiles: catalog, resolveRepo, readDeliveryMode },
+      { profiles: catalog, resolveRepo, readRepoDefaults },
     );
     expect(result).toMatchObject({ ok: false, fieldErrors: { deliveryMode: [expect.any(String)] } });
+  });
+
+  it("a request without auto-resume uses the repository's default", async () => {
+    readRepoDefaults.mockResolvedValueOnce({ deliveryMode: 'pull_request', autoResume: true });
+    const result = await validateNewSession(valid, { profiles: catalog, resolveRepo, readRepoDefaults });
+    expect(result).toMatchObject({ ok: true, input: { autoResume: true } });
+  });
+
+  it('an explicit auto-resume choice wins over the repository default, either way', async () => {
+    readRepoDefaults.mockResolvedValueOnce({ deliveryMode: 'pull_request', autoResume: true });
+    const off = await validateNewSession({ ...valid, autoResume: false }, { profiles: catalog, resolveRepo, readRepoDefaults });
+    expect(off).toMatchObject({ ok: true, input: { autoResume: false } });
+    readRepoDefaults.mockResolvedValueOnce({ deliveryMode: 'pull_request', autoResume: false });
+    const on = await validateNewSession({ ...valid, autoResume: true }, { profiles: catalog, resolveRepo, readRepoDefaults });
+    expect(on).toMatchObject({ ok: true, input: { autoResume: true } });
+  });
+
+  it('does not read the repository defaults when both are explicit', async () => {
+    readRepoDefaults.mockClear();
+    await validateNewSession({ ...valid, deliveryMode: 'push', autoResume: true }, { profiles: catalog, resolveRepo, readRepoDefaults });
+    expect(readRepoDefaults).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-boolean auto-resume as a field error', async () => {
+    const result = await validateNewSession({ ...valid, autoResume: 'yes' }, { profiles: catalog, resolveRepo, readRepoDefaults });
+    expect(result).toMatchObject({ ok: false, fieldErrors: { autoResume: [expect.any(String)] } });
   });
 });

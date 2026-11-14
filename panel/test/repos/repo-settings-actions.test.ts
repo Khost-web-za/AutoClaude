@@ -34,10 +34,17 @@ const profile = (name: string) => ({
   locked: name === 'base',
 });
 
-function form(branch: string, profiles: string[], deliveryMode = 'pull_request'): FormData {
+function form(
+  branch: string,
+  profiles: string[],
+  deliveryMode = 'pull_request',
+  resume: { autoResume?: boolean; message?: string } = {},
+): FormData {
   const data = new FormData();
   data.set('defaultBaseBranch', branch);
   data.set('deliveryMode', deliveryMode);
+  if (resume.autoResume) data.set('autoResume', 'on');
+  data.set('resumeMessage', resume.message ?? 'Please continue where you left off.');
   for (const name of profiles) data.append('profiles', name);
   data.set('$ACTION_ID_abc', '');
   return data;
@@ -63,6 +70,8 @@ describe('updateRepoSettings', () => {
       defaultBaseBranch: 'develop',
       defaultProfiles: ['frontend', 'seo'],
       deliveryMode: 'pull_request',
+      autoResume: false,
+      resumeMessage: 'Please continue where you left off.',
     });
     expect(revalidatePath).toHaveBeenCalledWith('/repos/Acme/Widgets/settings');
   });
@@ -73,6 +82,8 @@ describe('updateRepoSettings', () => {
       defaultBaseBranch: null,
       defaultProfiles: [],
       deliveryMode: 'pull_request',
+      autoResume: false,
+      resumeMessage: 'Please continue where you left off.',
     });
   });
 
@@ -99,6 +110,30 @@ describe('updateRepoSettings', () => {
       fieldErrors: { deliveryMode: ['Pick pull request or push.'] },
     });
     expect(saveRepoSettings).not.toHaveBeenCalled();
+  });
+
+  it('saves auto-resume on with a trimmed resume message', async () => {
+    await updateRepoSettings('acme/widgets', { status: 'idle' }, form('', [], 'pull_request', { autoResume: true, message: '  Carry on.  ' }));
+    expect(saveRepoSettings).toHaveBeenCalledWith(
+      'Acme/Widgets',
+      expect.objectContaining({ autoResume: true, resumeMessage: 'Carry on.' }),
+    );
+  });
+
+  it('a missing switch means auto-resume off', async () => {
+    await updateRepoSettings('acme/widgets', { status: 'idle' }, form('', []));
+    expect(saveRepoSettings).toHaveBeenCalledWith('Acme/Widgets', expect.objectContaining({ autoResume: false }));
+  });
+
+  it('rejects an empty or over-500-character resume message', async () => {
+    for (const message of ['', '   ', 'x'.repeat(501)]) {
+      expect(
+        await updateRepoSettings('acme/widgets', { status: 'idle' }, form('', [], 'pull_request', { autoResume: true, message })),
+      ).toMatchObject({ status: 'error', fieldErrors: { resumeMessage: [expect.any(String)] } });
+    }
+    expect(saveRepoSettings).not.toHaveBeenCalled();
+    await updateRepoSettings('acme/widgets', { status: 'idle' }, form('', [], 'pull_request', { message: 'x'.repeat(500) }));
+    expect(saveRepoSettings).toHaveBeenCalledTimes(1);
   });
 
   it('answers a database failure with an error instead of throwing', async () => {

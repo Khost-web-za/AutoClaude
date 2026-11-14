@@ -35,6 +35,7 @@ export type StartSessionInput = {
   profiles: string[];
   startingTask: string | null;
   deliveryMode: DeliveryMode;
+  autoResume: boolean;
 };
 
 const MAX_ID_ATTEMPTS = 16;
@@ -137,7 +138,7 @@ export async function startSession(
   if (merged.warnings.length > 0) console.warn(`[sessions] config warnings: ${merged.warnings.join('; ')}`);
 
   const secret = randomBytes(32).toString('base64url');
-  const { deliveryMode } = input;
+  const { deliveryMode, autoResume } = input;
   // Push mode works on the base branch itself, so that is the branch only one live session may hold.
   const startedRow = deps.db.transaction(async (tx) => {
     const { limits, running } = await lockCapacity(tx);
@@ -156,6 +157,7 @@ export async function startSession(
       defaultBranch,
       startingTask,
       deliveryMode,
+      autoResume,
       status: 'starting',
       secretHash: hashSessionSecret(secret),
     });

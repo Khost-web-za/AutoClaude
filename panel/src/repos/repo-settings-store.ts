@@ -1,10 +1,22 @@
 import { eq } from 'drizzle-orm';
 import { db as sharedDb, type Db } from '@/db/client';
-import { repoSettings, type DeliveryMode } from '@/db/schema';
+import { DEFAULT_RESUME_MESSAGE, repoSettings, type DeliveryMode } from '@/db/schema';
 
-export type RepoSettings = { defaultBaseBranch: string | null; defaultProfiles: string[]; deliveryMode: DeliveryMode };
+export type RepoSettings = {
+  defaultBaseBranch: string | null;
+  defaultProfiles: string[];
+  deliveryMode: DeliveryMode;
+  autoResume: boolean;
+  resumeMessage: string;
+};
 
-const EMPTY: RepoSettings = { defaultBaseBranch: null, defaultProfiles: [], deliveryMode: 'pull_request' };
+const EMPTY: RepoSettings = {
+  defaultBaseBranch: null,
+  defaultProfiles: [],
+  deliveryMode: 'pull_request',
+  autoResume: false,
+  resumeMessage: DEFAULT_RESUME_MESSAGE,
+};
 
 /** A repository's remembered defaults (none until set here or by starting a session). */
 export async function readRepoSettings(repoFullName: string, conn: Db = sharedDb): Promise<RepoSettings> {
@@ -13,6 +25,8 @@ export async function readRepoSettings(repoFullName: string, conn: Db = sharedDb
       defaultBaseBranch: repoSettings.defaultBaseBranch,
       defaultProfiles: repoSettings.defaultProfiles,
       deliveryMode: repoSettings.deliveryMode,
+      autoResume: repoSettings.autoResume,
+      resumeMessage: repoSettings.resumeMessage,
     })
     .from(repoSettings)
     .where(eq(repoSettings.repoFullName, repoFullName));

@@ -43,6 +43,13 @@
       "when": 1794662085294,
       "tag": "0005_perfect_joshua_kane",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794664531966,
+      "tag": "0006_modern_lionheart",
+      "breakpoints": true
     }
   ]
 }
