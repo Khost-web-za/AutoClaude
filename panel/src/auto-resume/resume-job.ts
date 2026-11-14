@@ -12,7 +12,11 @@ import { planResume, RELAUNCHED_ATTEMPTS, trustedScreenReset, usageBlockedUntil,
 const MINUTE_MS = 60_000;
 const LIVE_STATUSES = ['working', 'waiting', 'idle'] as const;
 const WAITING_STATES = ['limited', 'resuming'] as const;
-/** With only usage to go on, a working session counts as limited once its runner has been quiet this long. */
+/**
+ * With only usage to go on, a working (or waiting) session counts as limited once its runner has been quiet
+ * this long: the limit can end a turn without a Stop. An idle session needs the screen: it finished its turn,
+ * and a full window may come from another session, so typing would only spend the fresh window on it.
+ */
 const QUIET_MS = 2 * MINUTE_MS;
 /** When neither usage nor the screen says when the limit resets. */
 const UNKNOWN_RESET_WAIT_MS = 15 * MINUTE_MS;
@@ -150,7 +154,7 @@ async function detectLimits(ctx: RunContext): Promise<void> {
     candidates.map(async (row, index) => {
       const screen = panes[index]?.screen ?? null;
       const lastEvent = lastEvents.get(row.id);
-      const quiet = row.status === 'idle' || !lastEvent || now.getTime() - lastEvent.getTime() >= QUIET_MS;
+      const quiet = row.status !== 'idle' && (!lastEvent || now.getTime() - lastEvent.getTime() >= QUIET_MS);
       if (!screen?.limited && !(fiveHourFull && quiet)) return;
 
       const resetsAt = usageReset ?? trustedScreenReset(screen, now) ?? later(now, UNKNOWN_RESET_WAIT_MS);

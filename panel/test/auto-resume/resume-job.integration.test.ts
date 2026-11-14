@@ -112,7 +112,10 @@ describe('auto-resume job', () => {
     withTestDb(async ({ db }) => {
       const usageReset = plus(RESET, 30);
       const fromUsage = await seed(db, { status: 'idle' });
-      await runResumeJob(setup(db, { getUsage: async () => usage(100, usageReset) }), NOW);
+      await runResumeJob(
+        setup(db, { capturePane: vi.fn(async () => fixture('limit-5-hour')), getUsage: async () => usage(100, usageReset) }),
+        NOW,
+      );
       expect((await load(db, fromUsage.id)).limitResetsAt).toEqual(usageReset);
 
       const unknown = await seed(db);
@@ -123,7 +126,7 @@ describe('auto-resume job', () => {
       expect(after.limitResetsAt).toEqual(plus(NOW, 15));
     }));
 
-  it('marks limited from usage only when idle or quiet for 2 minutes', () =>
+  it('marks limited from usage only a working session quiet for 2 minutes; an idle one needs the screen', () =>
     withTestDb(async ({ db }) => {
       const busy = await seed(db);
       const quiet = await seed(db);
@@ -139,7 +142,8 @@ describe('auto-resume job', () => {
       await runResumeJob(setup(db, { getUsage: async () => usage(100) }), NOW);
       expect((await load(db, busy.id)).limitState).toBe('none');
       expect((await load(db, quiet.id)).limitState).toBe('limited');
-      expect((await load(db, idle.id)).limitState).toBe('limited');
+      // Finished: 100 % may come from another session, and typing would spend the fresh window on it.
+      expect((await load(db, idle.id)).limitState).toBe('none');
       expect((await load(db, silent.id)).limitState).toBe('limited');
       expect((await load(db, off.id)).limitState).toBe('none');
     }));
