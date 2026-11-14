@@ -24,9 +24,14 @@ describe('session keys', () => {
     expect(commands()).toEqual([
       ['tmux', 'send-keys', '-t', 'claude', 'Escape'],
       ['tmux', 'send-keys', '-t', 'claude', 'C-u'],
-      ['tmux', 'send-keys', '-t', 'claude', '-l', 'Please continue; $HOME "x"'],
+      ['tmux', 'send-keys', '-t', 'claude', '-l', '--', 'Please continue; $HOME "x"'],
       ['tmux', 'send-keys', '-t', 'claude', 'Enter'],
     ]);
+  });
+
+  it('types text that starts with a dash as text', async () => {
+    await typeIntoClaude(deps, container, '-n keep going');
+    expect(commands()).toContainEqual(['tmux', 'send-keys', '-t', 'claude', '-l', '--', '-n keep going']);
   });
 
   it('stops at the first failed key', async () => {
@@ -52,7 +57,7 @@ describe('session keys', () => {
     const [cmd] = commands();
     expect(cmd?.slice(0, 2)).toEqual(['sh', '-c']);
     expect(cmd?.[2]).toBe(
-      'printf %s "$1" | base64 -d > "$HOME/.runner/resume-message" && touch "$HOME/.runner/panel-relaunch" && tmux kill-session -t claude',
+      'printf %s "$1" | base64 -d > "$HOME/.runner/resume-message" && touch "$HOME/.runner/panel-relaunch" && { tmux kill-session -t claude 2>/dev/null || true; }',
     );
     expect(cmd?.slice(3)).toEqual(['sh', Buffer.from(message, 'utf8').toString('base64')]);
   });

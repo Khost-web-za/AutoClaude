@@ -3,7 +3,7 @@ import { capturePane, requestRelaunch, typeIntoClaude } from '@/auto-resume/sess
 import { db } from '@/db/client';
 import { docker } from '@/docker/docker-client';
 import { eventBus } from '@/live/event-bus';
-import { readRepoSettings } from '@/repos/repo-settings-store';
+import { readResumeMessages } from '@/repos/repo-settings-store';
 import { readSettings } from '@/settings/settings-store';
 import { runKickoffContainer } from '@/kickoffs/kickoff-container';
 import { runKickoffJob } from '@/kickoffs/kickoff-job';
@@ -87,7 +87,7 @@ export function startSchedulerLoop(): void {
             requestRelaunch: (containerId, message) => requestRelaunch({ docker }, docker.getContainer(containerId), message),
             getUsage: getUsageResult,
             publish: (event) => eventBus.publish(event),
-            resumeMessageFor: async (repoFullName) => (await readRepoSettings(repoFullName, db)).resumeMessage,
+            resumeMessagesFor: (repoFullNames) => readResumeMessages(repoFullNames, db),
             containerTimeZone: RUNNER_TIME_ZONE,
           },
           now,

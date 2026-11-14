@@ -54,6 +54,31 @@ describe('planResume', () => {
     expect(planResume(input({ screen: screen({ limited: true, resetsAt: later }) }))).toEqual({ kind: 'rewait', resetsAt: later });
   });
 
+  it('ignores the old limit line rolled to tomorrow and types', () => {
+    const rolled = plus(RESET, 24 * 60);
+    expect(planResume(input({ usage: null, screen: screen({ limited: true, resetsAt: rolled }) }))).toEqual({
+      kind: 'type',
+      nextAt: plus(RESET, 6),
+    });
+  });
+
+  it('never schedules the next step in the past', () => {
+    const now = plus(RESET, 30);
+    expect(planResume(input({ attempts: 1, now }))).toEqual({ kind: 'type', nextAt: plus(now, 2) });
+    expect(planResume(input({ attempts: 0, now, screen: null, claudeRunning: false }))).toEqual({
+      kind: 'relaunch',
+      nextAt: plus(now, 2),
+    });
+  });
+
+  it('holds rather than relaunching over a question', () => {
+    expect(planResume(input({ attempts: 3, now: plus(RESET, 18), screen: screen({ blocking: 'question' }) }))).toEqual({
+      kind: 'hold',
+      nextAt: plus(RESET, 21),
+      detail: 'Waiting: Claude is asking something',
+    });
+  });
+
   it('types when the screen limit resets within the minute', () => {
     const soon = plus(RESET, 1.5);
     expect(planResume(input({ screen: screen({ limited: true, resetsAt: soon }) }))).toEqual({ kind: 'type', nextAt: plus(RESET, 6) });

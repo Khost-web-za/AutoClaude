@@ -5,8 +5,9 @@ import type { SessionDocker } from '@/sessions/session-deps';
 
 const TMUX_SESSION = 'claude';
 /** The runner's state dir (`$STATE_DIR` in supervise.sh); the files are the Task 11 relaunch contract. */
+// The markers must be written; the tmux session may already be gone (Claude not running), which is fine.
 const RELAUNCH_SCRIPT =
-  'printf %s "$1" | base64 -d > "$HOME/.runner/resume-message" && touch "$HOME/.runner/panel-relaunch" && tmux kill-session -t claude';
+  'printf %s "$1" | base64 -d > "$HOME/.runner/resume-message" && touch "$HOME/.runner/panel-relaunch" && { tmux kill-session -t claude 2>/dev/null || true; }';
 
 export type SessionKeysDeps = { docker: SessionDocker };
 
@@ -31,7 +32,8 @@ export async function typeIntoClaude(
   if (opts.escapeFirst) await send(deps, container, ['tmux', 'send-keys', '-t', TMUX_SESSION, 'Escape']);
   // C-u first: a failed Enter must not leave stale text for the next keystrokes to extend.
   await send(deps, container, ['tmux', 'send-keys', '-t', TMUX_SESSION, 'C-u']);
-  await send(deps, container, ['tmux', 'send-keys', '-t', TMUX_SESSION, '-l', text]);
+  // `--`: text starting with `-` is typed, not read as flags.
+  await send(deps, container, ['tmux', 'send-keys', '-t', TMUX_SESSION, '-l', '--', text]);
   await send(deps, container, ['tmux', 'send-keys', '-t', TMUX_SESSION, 'Enter']);
 }
 

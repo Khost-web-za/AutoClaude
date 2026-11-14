@@ -7,7 +7,7 @@ import type { UsageResult } from '@/usage/usage-client';
 import { effectiveWindow } from '@/usage/usage-format';
 import type { UsageSnapshot } from '@/usage/usage-types';
 import { readScreen, type ScreenRead } from './limit-screen';
-import { planResume, usageBlockedUntil, type ResumeStep } from './resume-plan';
+import { planResume, RELAUNCHED_ATTEMPTS, trustedScreenReset, usageBlockedUntil, type ResumeStep } from './resume-plan';
 
 const MINUTE_MS = 60_000;
 const LIVE_STATUSES = ['working', 'waiting', 'idle'] as const;
@@ -27,7 +27,8 @@ export type ResumeJobDeps = {
   requestRelaunch: (containerId: string, message: string) => Promise<void>;
   getUsage: () => Promise<UsageResult>;
   publish: (event: LiveEvent) => void;
-  resumeMessageFor: (repoFullName: string) => Promise<string>;
+  /** Each repository's resume message, for all the given repositories at once. */
+  resumeMessagesFor: (repoFullNames: string[]) => Promise<Map<string, string>>;
   /** The zone reset times on Claude's screen are in when they name none. */
   containerTimeZone: string;
 };
@@ -149,7 +150,7 @@ async function detectLimits(ctx: RunContext): Promise<void> {
       const quiet = row.status === 'idle' || !lastEvent || now.getTime() - lastEvent.getTime() >= QUIET_MS;
       if (!screen?.limited && !(fiveHourFull && quiet)) return;
 
-      const resetsAt = usageReset ?? screen?.resetsAt ?? later(now, UNKNOWN_RESET_WAIT_MS);
+      const resetsAt = usageReset ?? trustedScreenReset(screen, now) ?? later(now, UNKNOWN_RESET_WAIT_MS);
       const values: LimitValues = {
         limitState: 'limited',
         limitResetsAt: resetsAt,
@@ -199,10 +200,12 @@ async function resumeDue(ctx: RunContext): Promise<void> {
         isNull(sessions.deletedAt),
       ),
     );
-  await Promise.all(due.map((row) => resumeOne(ctx, row)));
+  if (due.length === 0) return;
+  const messages = await deps.resumeMessagesFor([...new Set(due.map((row) => row.repoFullName))]);
+  await Promise.all(due.map((row) => resumeOne(ctx, row, messages.get(row.repoFullName)!)));
 }
 
-async function resumeOne(ctx: RunContext, row: DueRow): Promise<void> {
+async function resumeOne(ctx: RunContext, row: DueRow, message: string): Promise<void> {
   const { deps, now } = ctx;
   const containerId = row.containerId!;
   // Claim: only the run that moves resume_next_at off the value it read takes this step.
@@ -229,7 +232,7 @@ async function resumeOne(ctx: RunContext, row: DueRow): Promise<void> {
     usage,
     claudeRunning: pane.claudeRunning,
   });
-  const values = await takeStep(deps, row, containerId, step);
+  const values = await takeStep(deps, row, containerId, step, message);
 
   // Only if nothing else moved the row meanwhile: a prompt reaching Claude clears the limit (runner API).
   const [written] = await deps.db
@@ -240,13 +243,21 @@ async function resumeOne(ctx: RunContext, row: DueRow): Promise<void> {
   if (written) publishLimit(deps, row.id, values);
 }
 
-async function takeStep(deps: ResumeJobDeps, row: DueRow, containerId: string, step: ResumeStep): Promise<LimitValues> {
+async function takeStep(
+  deps: ResumeJobDeps,
+  row: DueRow,
+  containerId: string,
+  step: ResumeStep,
+  message: string,
+): Promise<LimitValues> {
   const attempts = row.resumeAttempts + 1;
   switch (step.kind) {
     case 'rewait':
+      // A new reset starts the ladder again; waiting spends no attempt.
       return {
         limitState: 'limited',
         limitResetsAt: step.resetsAt,
+        resumeAttempts: 0,
         resumeNextAt: later(step.resetsAt, MINUTE_MS),
         limitDetail: null,
       };
@@ -255,14 +266,12 @@ async function takeStep(deps: ResumeJobDeps, row: DueRow, containerId: string, s
     case 'fail':
       return { limitState: 'failed', resumeNextAt: null, limitDetail: step.detail };
     case 'type': {
-      const message = await deps.resumeMessageFor(row.repoFullName);
       const detail = await failureDetail(() => deps.typeIntoClaude(containerId, message, { escapeFirst: true }));
       return { limitState: 'resuming', resumeAttempts: attempts, resumeNextAt: step.nextAt, limitDetail: detail };
     }
     case 'relaunch': {
-      const message = await deps.resumeMessageFor(row.repoFullName);
       const detail = await failureDetail(() => deps.requestRelaunch(containerId, message));
-      return { limitState: 'resuming', resumeAttempts: attempts, resumeNextAt: step.nextAt, limitDetail: detail };
+      return { limitState: 'resuming', resumeAttempts: RELAUNCHED_ATTEMPTS, resumeNextAt: step.nextAt, limitDetail: detail };
     }
   }
 }

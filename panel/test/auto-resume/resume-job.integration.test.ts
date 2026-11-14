@@ -9,6 +9,7 @@ import type { Db } from '@/db/client';
 import * as schema from '@/db/schema';
 import { repoSettings, sessionEvents, sessions } from '@/db/schema';
 import { withTestDb } from '@/db/testing';
+import { readResumeMessages } from '@/repos/repo-settings-store';
 import type { UsageResult } from '@/usage/usage-client';
 
 const fixture = (name: string) =>
@@ -32,7 +33,7 @@ function setup(db: Db, overrides: Partial<ResumeJobDeps> = {}) {
     requestRelaunch: vi.fn(async () => {}),
     getUsage: vi.fn(async () => usage(20)),
     publish: vi.fn(),
-    resumeMessageFor: vi.fn(async () => 'Please continue where you left off.'),
+    resumeMessagesFor: vi.fn(async (repos: string[]) => new Map(repos.map((repo) => [repo, 'Please continue where you left off.']))),
     containerTimeZone: 'UTC',
     ...overrides,
   } satisfies ResumeJobDeps;
@@ -173,12 +174,13 @@ describe('auto-resume job', () => {
     withTestDb(async ({ db }) => {
       await db.insert(repoSettings).values({ repoFullName: 'acme/widgets', resumeMessage: 'Keep going, please.' });
       const row = await seed(db, waiting(0, plus(RESET, 1)));
-      const resumeMessageFor = vi.fn(async (repo: string) => {
-        const [settings] = await db.select().from(repoSettings).where(eq(repoSettings.repoFullName, repo));
-        return settings!.resumeMessage;
-      });
-      const deps = setup(db, { resumeMessageFor });
+      const other = await seed(db, { ...waiting(0, plus(RESET, 1)), repoFullName: 'acme/gadgets' });
+      const resumeMessagesFor = vi.fn((repos: string[]) => readResumeMessages(repos, db));
+      // The limit line is still on screen at reset+1: `resets 3pm` now reads as tomorrow and must not re-wait.
+      const deps = setup(db, { resumeMessagesFor, capturePane: vi.fn(async () => fixture('limit-5-hour')) });
       await runResumeJob(deps, plus(RESET, 1));
+      expect(resumeMessagesFor).toHaveBeenCalledTimes(1);
+      expect(deps.typeIntoClaude).toHaveBeenCalledWith(other.containerId, 'Please continue where you left off.', { escapeFirst: true });
       expect(deps.typeIntoClaude).toHaveBeenCalledWith(row.containerId, 'Keep going, please.', { escapeFirst: true });
       const after = await load(db, row.id);
       expect(after.limitState).toBe('resuming');
@@ -230,7 +232,7 @@ describe('auto-resume job', () => {
       expect(after.limitState).toBe('limited');
       expect(after.limitResetsAt).toEqual(weeklyReset);
       expect(after.resumeNextAt).toEqual(plus(weeklyReset, 1));
-      expect(after.resumeAttempts).toBe(1);
+      expect(after.resumeAttempts).toBe(0);
     }));
 
   it('continues from the stored attempt after restart', () =>
@@ -266,7 +268,34 @@ describe('auto-resume job', () => {
       await runResumeJob(deps, plus(RESET, 1));
       expect(deps.typeIntoClaude).not.toHaveBeenCalled();
       expect(deps.requestRelaunch).toHaveBeenCalledTimes(1);
-      expect((await load(db, row.id)).resumeNextAt).toEqual(plus(RESET, 21));
+      const after = await load(db, row.id);
+      expect(after.resumeNextAt).toEqual(plus(RESET, 21));
+      expect(after.resumeAttempts).toBe(4);
+
+      await runResumeJob(deps, plus(RESET, 21));
+      expect((await load(db, row.id)).limitState).toBe('failed');
+      expect(deps.requestRelaunch).toHaveBeenCalledTimes(1);
+    }));
+
+  it('schedules a late step from now, not in the past', () =>
+    withTestDb(async ({ db }) => {
+      const row = await seed(db, waiting(1, plus(RESET, 6)));
+      const now = plus(RESET, 30);
+      await runResumeJob(setup(db), now);
+      const after = await load(db, row.id);
+      expect(after.resumeAttempts).toBe(2);
+      expect(after.resumeNextAt).toEqual(plus(now, 2));
+    }));
+
+  it('does not trust an old limit line re-read just after its reset', () =>
+    withTestDb(async ({ db }) => {
+      const row = await seed(db);
+      const now = plus(RESET, 1);
+      const deps = setup(db, { capturePane: vi.fn(async () => fixture('limit-5-hour')), getUsage: async () => usage(30, null) });
+      await runResumeJob(deps, now);
+      const after = await load(db, row.id);
+      expect(after.limitState).toBe('limited');
+      expect(after.limitResetsAt).toEqual(plus(now, 15));
     }));
 
   it('keeps a limit a prompt cleared while the message was being typed', () =>
