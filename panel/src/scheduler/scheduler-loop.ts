@@ -17,25 +17,28 @@ export type SchedulerJob = { name: string; run: (now: Date) => Promise<void> };
 
 export type SchedulerLoopOptions = { intervalMs: number; now: () => Date; warn: (message: string) => void };
 
+/**
+ * Runs every job each tick. Each job skips its own turn while its previous run is still going (no overlap per
+ * job), so a slow job (a kick-off waiting on its container) never holds up the others.
+ */
 export function createSchedulerLoop(jobs: SchedulerJob[], opts: SchedulerLoopOptions) {
-  let inFlight = false;
+  const inFlight = new Set<SchedulerJob>();
   let timer: NodeJS.Timeout | undefined;
 
-  async function tick(): Promise<void> {
-    if (inFlight) return; // a slow job must not stack overlapping ticks
-    inFlight = true;
+  async function runJob(job: SchedulerJob, now: Date): Promise<void> {
+    inFlight.add(job);
     try {
-      const now = opts.now();
-      const results = await Promise.allSettled(jobs.map((job) => job.run(now)));
-      results.forEach((result, index) => {
-        const name = jobs[index]?.name ?? 'job';
-        if (result.status !== 'rejected') return;
-        const reason: unknown = result.reason;
-        opts.warn(`[scheduler] ${name} failed: ${reason instanceof Error ? reason.message : 'error'}`);
-      });
+      await job.run(now);
+    } catch (reason) {
+      opts.warn(`[scheduler] ${job.name} failed: ${reason instanceof Error ? reason.message : 'error'}`);
     } finally {
-      inFlight = false;
+      inFlight.delete(job);
     }
+  }
+
+  async function tick(): Promise<void> {
+    const now = opts.now();
+    await Promise.all(jobs.filter((job) => !inFlight.has(job)).map((job) => runJob(job, now)));
   }
 
   function start(): void {

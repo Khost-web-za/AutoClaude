@@ -33,7 +33,7 @@ describe('scheduler loop', () => {
     expect(warn).toHaveBeenCalledWith('[scheduler] bad failed: boom');
   });
 
-  it('skips a tick while the previous one runs', async () => {
+  it("skips a job's turn while its previous run is still going", async () => {
     let release!: () => void;
     const run = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
     const { loop } = make([{ name: 'slow', run }]);
@@ -42,8 +42,27 @@ describe('scheduler loop', () => {
     expect(run).toHaveBeenCalledTimes(1);
     release();
     await first;
-    void loop.tick();
+    const third = loop.tick();
     expect(run).toHaveBeenCalledTimes(2);
     release();
+    await third;
+  });
+
+  it('a slow job does not hold up the others', async () => {
+    let release!: () => void;
+    const slow = vi.fn(() => new Promise<void>((resolve) => (release = resolve)));
+    const fast = vi.fn().mockResolvedValue(undefined);
+    const { loop } = make([
+      { name: 'kickoffs', run: slow },
+      { name: 'auto-resume', run: fast },
+    ]);
+    const first = loop.tick();
+    await new Promise((resolve) => setTimeout(resolve, 0)); // the fast job's first run settles; the slow one does not
+    await loop.tick();
+    await loop.tick();
+    expect(slow).toHaveBeenCalledTimes(1);
+    expect(fast).toHaveBeenCalledTimes(3);
+    release();
+    await first;
   });
 });
