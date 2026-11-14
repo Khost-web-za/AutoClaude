@@ -110,10 +110,10 @@ Keep `base` mostly as it is, because that is the only place upstream updates can
 **Auto-resume.** When a session hits its usage limit, auto-resume can continue it for you. It is off by default. Turn it on as a default per repository, or with the switch on a single session. The repository also holds the resume message. After the limit resets, the panel:
 
 - types the resume message at reset + 1 minute, and tries again at +6 and +16 minutes;
-- relaunches Claude with `--continue` at +18 minutes;
+- relaunches Claude with `--continue` at +18 minutes at the earliest (held while Claude shows a question);
 - gives up at +21 minutes.
 
-It never types over a permission prompt or a question from Claude. If the limit keeps coming back, it types one message per real reset. **Resume now** on a session does the same without waiting.
+Before each step it checks again. If Claude's screen shows a later reset time, or a window is still full (for example the weekly one), it simply waits for that reset, and waiting costs no attempt. It types only at the limit message or an empty prompt: never over a permission prompt, a question from Claude or text you have not sent. If the limit keeps coming back, it types one message per real reset. A session you stop or restart forgets its limit. **Resume now** on a session does the same without waiting.
 
 **Usage bars.** The bars keep the last good reading. When it is older than 3 minutes they show "as of HH:mm" instead of jumping to empty.
 
