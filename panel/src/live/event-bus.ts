@@ -7,7 +7,8 @@ export type LiveEvent =
   | { kind: 'session'; sessionId: string; status: SessionStatus; detail?: string; remoteControlUrl?: string }
   | { kind: 'session_event'; sessionId: string; type: string; at: string }
   | { kind: 'usage'; usage: UsageSnapshot | null; stale: boolean; reason: UsageFailureReason | null }
-  | { kind: 'host'; stats: HostStats | null };
+  | { kind: 'host'; stats: HostStats | null }
+  | { kind: 'kickoffs' };
 
 export type LiveListener = (event: LiveEvent) => void;
 
