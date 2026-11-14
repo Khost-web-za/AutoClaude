@@ -14,6 +14,9 @@ export CLAUDE_BIN="${CLAUDE_BIN:-claude}"
 export RC_NAME="${RC_NAME:-${REPO_FULL_NAME##*/} · ${WORK_BRANCH}}"
 export STARTING_TASK_FILE="$STATE_DIR/starting-task"
 export CLAUDE_EXIT_FILE="$STATE_DIR/claude-exit-code"
+export RESUME_MESSAGE_FILE="$STATE_DIR/resume-message"
+# Written by the panel (after resume-message) to ask for an immediate relaunch.
+RELAUNCH_MARKER="$STATE_DIR/panel-relaunch"
 
 default_url_regex='https://claude\.ai/code[/?][^[:space:]"<>'\'']*'
 URL_REGEX="${URL_REGEX:-$default_url_regex}"
@@ -52,7 +55,7 @@ poll_url() {
 exit_times=()
 launch_reported=false
 while true; do
-  rm -f "$CLAUDE_EXIT_FILE"
+  rm -f "$CLAUDE_EXIT_FILE" "$RELAUNCH_MARKER"
   tmux new-session -d -s claude -x 220 -y 50 -c "$REPO_DIR" "$RUNNER/run-claude.sh" "$mode"
   touch "$STATE_DIR/launched"
   if [ "$launch_reported" = false ]; then
@@ -64,6 +67,18 @@ while true; do
     poll_url
     sleep "$POLL_SECONDS"
   done
+
+  # A requested relaunch (marker present, even if Claude had already exited on its
+  # own) is consumed once: no exit_times entry, no backoff, resumes with the message.
+  # Without the marker, a leftover message must not leak into a natural restart.
+  if [ -e "$RELAUNCH_MARKER" ]; then
+    rm -f "$RELAUNCH_MARKER"
+    report claude_exited '{"code":0,"restarting":true,"fatal":false,"requested":true}'
+    echo "supervise: relaunch requested by the panel" >&2
+    mode=resume
+    continue
+  fi
+  rm -f "$RESUME_MESSAGE_FILE"
 
   code=$(cat "$CLAUDE_EXIT_FILE" 2>/dev/null || echo 255)
   [[ "$code" =~ ^[0-9]+$ ]] || code=255
