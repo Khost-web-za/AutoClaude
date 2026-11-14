@@ -36,6 +36,13 @@
       "when": 1794661041743,
       "tag": "0004_abandoned_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794662085294,
+      "tag": "0005_perfect_joshua_kane",
+      "breakpoints": true
     }
   ]
 }
