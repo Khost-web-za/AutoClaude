@@ -9,6 +9,8 @@ const PULL_TIMEOUT_MS = 60_000;
 
 const RESOLVE_HINT =
   "Resolve it (or ask the user if the intent of conflicting changes is unclear). Never reset or force-push.";
+const AUTOSTASH_CONFLICT =
+  "The workspace was synced with its remote, but re-applying your uncommitted edits left merge conflicts in the working tree. Your edits are also kept in the stash (stash@{0}). Resolve the conflicts, or ask the user (AskUserQuestion) if the intent is unclear. Never drop the stash, reset or force-push.";
 const REBASE_IN_PROGRESS =
   "A rebase is in progress in the workspace. Finish it (resolve conflicts, `git rebase --continue`) before other work; ask the user if the intent of conflicting changes is unclear. Never reset or force-push.";
 
@@ -54,6 +56,16 @@ export async function syncWorkspace({ repoDir, source, mode }) {
       status: "failed",
       summary: tail.split("\n").at(-1).slice(0, 200),
       context: `Syncing the workspace with its remote failed:\n${tail}\n${RESOLVE_HINT}`,
+    };
+  }
+
+  // `pull --autostash` exits 0 even when re-applying the stash conflicts.
+  const unmerged = await git(repoDir, ["diff", "--name-only", "--diff-filter=U"], 10_000);
+  if (unmerged.ok && unmerged.stdout) {
+    return {
+      status: "failed",
+      summary: "uncommitted edits conflict with incoming changes",
+      context: AUTOSTASH_CONFLICT,
     };
   }
 

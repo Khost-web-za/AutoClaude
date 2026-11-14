@@ -53,6 +53,17 @@ test("autostashes a dirty tree and keeps the edit", async () => {
   assert.ok(existsSync(join(repo, "a.txt")));
 });
 
+test("autostash conflict -> failed, edit kept in the stash", async () => {
+  const { repo, other } = setup();
+  pushFile(other, "README.md", "remote\n", "remote change");
+  git(other, "push", "-q", "origin", "main");
+  writeFileSync(join(repo, "README.md"), "dirty\n");
+  const r = await syncWorkspace({ repoDir: repo, source: "startup", mode: "push" });
+  assert.equal(r.status, "failed");
+  assert.match(r.context, /stash@\{0\}/);
+  assert.match(git(repo, "stash", "list"), /autostash/);
+});
+
 test("rebases a local commit onto a new remote commit", async () => {
   const { repo, other } = setup();
   pushFile(repo, "local.txt", "l\n");
