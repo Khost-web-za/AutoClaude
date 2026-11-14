@@ -92,13 +92,6 @@ describe('startSession bookkeeping', () => {
       expect(row).toMatchObject({ autoResume: true, limitState: 'none', resumeAttempts: 0 });
     }));
 
-  it('copies the auto-resume choice onto the session', () =>
-    withTestDb(async ({ db }) => {
-      const { sessionId } = await startSession({ ...input, autoResume: true }, testDeps(db));
-      const [row] = await db.select().from(sessions).where(eq(sessions.id, sessionId));
-      expect(row).toMatchObject({ autoResume: true, limitState: 'none', resumeAttempts: 0 });
-    }));
-
   it('a Docker failure marks the session failed with a detail and removes container and volume', () =>
     withTestDb(async ({ db }) => {
       const { docker, calls } = fakeDocker({ failStart: true });
