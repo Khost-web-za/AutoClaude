@@ -26,7 +26,8 @@ import {
 import { buildContainerSpec, supportsStorageOpt } from './container-spec';
 import { removeSessionResources } from './delete-session';
 import { sharedSessionDeps, type SessionDeps } from './session-deps';
-import { loadLiveSession, setSessionStatus } from './session-record';
+import { loadLiveSession, publishLimitCleared, setSessionStatus } from './session-record';
+import { CLEARED_LIMIT } from './session-status';
 import { sessionShortId, workBranchName } from './work-branch';
 
 export type StartSessionInput = {
@@ -285,14 +286,16 @@ export async function restartSession(id: string, deps: SessionDeps = sharedSessi
     if (!isRunning && current.deliveryMode === 'push') {
       await assertBranchFree(tx, current.repoFullName, current.workBranch, current.id);
     }
+    // A restarted Claude starts afresh: a limit from before (or a crashed resume) no longer applies.
     await tx
       .update(sessions)
-      .set({ status: 'starting', statusDetail: null, endedAt: null, remoteControlUrl: null })
+      .set({ ...CLEARED_LIMIT, status: 'starting', statusDetail: null, endedAt: null, remoteControlUrl: null })
       .where(eq(sessions.id, row.id));
-    return { wasRunning: isRunning, remoteControlUrl: current.remoteControlUrl };
+    return { wasRunning: isRunning, remoteControlUrl: current.remoteControlUrl, hadLimit: current.limitState !== 'none' };
   });
-  const { wasRunning, remoteControlUrl } = await mapBranchBusy(deps, row.repoFullName, row.workBranch, restarted, row.id);
+  const { wasRunning, remoteControlUrl, hadLimit } = await mapBranchBusy(deps, row.repoFullName, row.workBranch, restarted, row.id);
   deps.eventBus.publish({ kind: 'session', sessionId: row.id, status: 'starting' });
+  if (hadLimit) publishLimitCleared(deps, row.id);
 
   const container = deps.docker.getContainer(row.containerId);
   try {

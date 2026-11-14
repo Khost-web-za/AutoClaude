@@ -10,7 +10,10 @@ import * as schema from '@/db/schema';
 import { repoSettings, sessionEvents, sessions } from '@/db/schema';
 import { withTestDb } from '@/db/testing';
 import { readResumeMessages } from '@/repos/repo-settings-store';
+import { restartSession } from '@/sessions/start-session';
+import { stopSession } from '@/sessions/stop-session';
 import type { UsageResult } from '@/usage/usage-client';
+import { testDeps } from '../sessions/session-test-deps';
 
 const fixture = (name: string) =>
   readFileSync(join(__dirname, '../fixtures/limit-screens', `${name}.txt`), 'utf8').replace(/^# synthetic[^\n]*\n/, '');
@@ -329,6 +332,40 @@ describe('auto-resume job', () => {
       const after = await load(db, row.id);
       expect(after.limitState).toBe('limited');
       expect(after.limitResetsAt).toEqual(plus(now, 15));
+    }));
+
+  it('a stop forgets the limit, so a restarted session is never typed into', () =>
+    withTestDb(async ({ db }) => {
+      const row = await seed(db, { ...waiting(1, plus(RESET, 6)), limitDetail: 'Waiting: Claude is asking something' });
+      const published: unknown[] = [];
+      const sessionDeps = testDeps(db, { eventBus: { publish: (event) => void published.push(event) } });
+      await stopSession(row.id, sessionDeps);
+      expect(await load(db, row.id)).toMatchObject({
+        status: 'stopped',
+        limitState: 'none',
+        resumeAttempts: 0,
+        limitResetsAt: null,
+        resumeNextAt: null,
+        limitDetail: null,
+      });
+      expect(published).toContainEqual({ kind: 'session_limit', sessionId: row.id, limitState: 'none', resumeAt: null, detail: null });
+
+      await restartSession(row.id, sessionDeps);
+      await db.update(sessions).set({ status: 'working' }).where(eq(sessions.id, row.id)); // the runner's SessionStart
+      const deps = setup(db);
+      await runResumeJob(deps, plus(RESET, 60));
+      expect(deps.typeIntoClaude).not.toHaveBeenCalled();
+      expect(deps.requestRelaunch).not.toHaveBeenCalled();
+      expect((await load(db, row.id)).limitState).toBe('none');
+    }));
+
+  it('a restart forgets a limit left from before (a crash)', () =>
+    withTestDb(async ({ db }) => {
+      const row = await seed(db, { status: 'failed', limitState: 'failed', limitDetail: 'Resume failed: Claude crashed' });
+      const published: unknown[] = [];
+      await restartSession(row.id, testDeps(db, { eventBus: { publish: (event) => void published.push(event) } }));
+      expect(await load(db, row.id)).toMatchObject({ status: 'starting', limitState: 'none', limitDetail: null });
+      expect(published).toContainEqual({ kind: 'session_limit', sessionId: row.id, limitState: 'none', resumeAt: null, detail: null });
     }));
 
   it('keeps a limit a prompt cleared while the message was being typed', () =>
