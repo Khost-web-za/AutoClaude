@@ -28,4 +28,11 @@ export async function register() {
   } catch (error) {
     console.warn('[claude] stale login helper cleanup failed:', error instanceof Error ? error.name : 'error');
   }
+
+  try {
+    const { removeStaleKickoffContainers } = await import('@/kickoffs/kickoff-container');
+    await removeStaleKickoffContainers();
+  } catch (error) {
+    console.warn('[kickoffs] stale kick-off container cleanup failed:', error instanceof Error ? error.name : 'error');
+  }
 }

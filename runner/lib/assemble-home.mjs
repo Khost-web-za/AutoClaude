@@ -67,6 +67,18 @@ async function readText(path) {
   return existsSync(path) ? readFile(path, "utf8") : "";
 }
 
+/** Links `<claudeDir>/.credentials.json` to the shared auth volume so a token refresh writes back to it. */
+export async function linkSharedCredentials(claudeDir, authDir) {
+  const credLink = join(claudeDir, ".credentials.json");
+  await rm(credLink, { force: true });
+  try {
+    await symlink(join(authDir, ".credentials.json"), credLink);
+  } catch (err) {
+    // Windows dev machines can't create symlinks unprivileged; the image is Linux.
+    if (!(process.platform === "win32" && err.code === "EPERM")) throw err;
+  }
+}
+
 export async function assembleHome({ configDir, overlayDir, homeDir, repoDir, authDir, vars = process.env }) {
   const claudeDir = join(homeDir, ".claude");
   await mkdir(claudeDir, { recursive: true });
@@ -94,14 +106,7 @@ export async function assembleHome({ configDir, overlayDir, homeDir, repoDir, au
   await writeFile(join(claudeDir, "CLAUDE.md"), userMd ? `${userMd}\n\n${sessionMd}` : sessionMd);
 
   // 4. shared credentials (spike: "Credential sharing")
-  const credLink = join(claudeDir, ".credentials.json");
-  await rm(credLink, { force: true });
-  try {
-    await symlink(join(authDir, ".credentials.json"), credLink);
-  } catch (err) {
-    // Windows dev machines can't create symlinks unprivileged; the image is Linux.
-    if (!(process.platform === "win32" && err.code === "EPERM")) throw err;
-  }
+  await linkSharedCredentials(claudeDir, authDir);
 
   // 5. ~/.claude.json: first-run answers + trust for the repo, keeping existing state on restart
   const statePath = join(homeDir, ".claude.json");
