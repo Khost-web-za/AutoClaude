@@ -5,6 +5,7 @@ import { requireOwner } from '@/auth/require-owner';
 import { listBranches, listRepos } from '@/github/repos';
 import { assertRepoAccessible, repoAccessFailure } from '@/repos/repo-access';
 import { readRepoSettings } from '@/repos/repo-settings-store';
+import type { DeliveryMode } from '@/db/schema';
 import type { PagedOptions } from '@/ui/paged-combo-box';
 
 const searchSchema = z.object({
@@ -13,7 +14,7 @@ const searchSchema = z.object({
 });
 
 export type RepoDefaults =
-  | { ok: true; fullName: string; baseBranch: string; profiles: string[] }
+  | { ok: true; fullName: string; baseBranch: string; profiles: string[]; deliveryMode: DeliveryMode }
   | { ok: false; message: string };
 
 /** New session's repository picker: one page (20) of repositories the App can see, searched by name. */
@@ -60,8 +61,8 @@ export async function searchBranchOptions(repo: unknown, query: unknown, page: u
 }
 
 /**
- * What New session pre-fills for a repository: its remembered base branch (else GitHub's default branch)
- * and its remembered profiles.
+ * What New session pre-fills for a repository: its remembered base branch (else GitHub's default branch),
+ * its remembered profiles and its delivery mode.
  */
 export async function repoDefaultsAction(repo: unknown): Promise<RepoDefaults> {
   await requireOwner();
@@ -73,6 +74,7 @@ export async function repoDefaultsAction(repo: unknown): Promise<RepoDefaults> {
       fullName: summary.fullName,
       baseBranch: settings.defaultBaseBranch ?? summary.defaultBranch,
       profiles: settings.defaultProfiles,
+      deliveryMode: settings.deliveryMode,
     };
   } catch (error) {
     return { ok: false, message: repoAccessFailure(error) };

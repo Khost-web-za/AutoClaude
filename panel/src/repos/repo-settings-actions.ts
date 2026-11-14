@@ -5,17 +5,22 @@ import { requireOwner } from '@/auth/require-owner';
 import type { FormState } from '@/feedback/form-state';
 import { getPanelEnv } from '@/env/panel-env';
 import { BASE_PROFILE, listProfiles } from '@/profiles/profile-catalog';
+import { z } from 'zod';
 import { optionalBranchNameSchema } from './branch-name';
 import { assertRepoAccessible, repoAccessFailure, repoPath } from './repo-access';
 import { saveRepoSettings } from './repo-settings-store';
 
+const deliveryModeSchema = z.enum(['pull_request', 'push']);
+
 /**
- * Saves the repository's default base branch (empty = GitHub's default branch) and default profiles.
+ * Saves the repository's default base branch (empty = GitHub's default branch), default profiles and
+ * session delivery mode.
  * `repo` is bound by the page; it is re-checked here like any other input.
  */
 export async function updateRepoSettings(repo: string, _previous: FormState, formData: FormData): Promise<FormState> {
   await requireOwner();
   const branch = optionalBranchNameSchema.safeParse(formData.get('defaultBaseBranch') ?? '');
+  const deliveryMode = deliveryModeSchema.safeParse(formData.get('deliveryMode'));
   const picked = formData.getAll('profiles').filter((value): value is string => typeof value === 'string');
   const [repoResult, catalog] = await Promise.all([
     assertRepoAccessible(repo).then(
@@ -31,7 +36,8 @@ export async function updateRepoSettings(repo: string, _previous: FormState, for
   const fieldErrors: Record<string, string[]> = {};
   if (!branch.success) fieldErrors.defaultBaseBranch = branch.error.issues.map((issue) => issue.message);
   if (unknown.length > 0) fieldErrors.profiles = ['Pick from the profiles shown; the list may have changed. Reload.'];
-  if (!branch.success || unknown.length > 0) {
+  if (!deliveryMode.success) fieldErrors.deliveryMode = ['Pick pull request or push.'];
+  if (!branch.success || !deliveryMode.success || unknown.length > 0) {
     return { status: 'error', message: 'Check the highlighted fields.', fieldErrors };
   }
 
@@ -43,6 +49,7 @@ export async function updateRepoSettings(repo: string, _previous: FormState, for
       defaultProfiles: catalog.profiles
         .map((profile) => profile.name)
         .filter((name) => name !== BASE_PROFILE && chosen.has(name)),
+      deliveryMode: deliveryMode.data,
     });
   } catch (error) {
     console.error('[repos] saving repository settings failed:', error instanceof Error ? error.name : 'error');

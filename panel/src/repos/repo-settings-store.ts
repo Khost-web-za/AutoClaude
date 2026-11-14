@@ -19,7 +19,7 @@ export async function readRepoSettings(repoFullName: string, conn: Db = sharedDb
   return row ?? EMPTY;
 }
 
-export async function saveRepoSettings(repoFullName: string, values: Omit<RepoSettings, 'deliveryMode'>, conn: Db = sharedDb): Promise<void> {
+export async function saveRepoSettings(repoFullName: string, values: RepoSettings, conn: Db = sharedDb): Promise<void> {
   await conn
     .insert(repoSettings)
     .values({ repoFullName, ...values })

@@ -33,6 +33,7 @@ async function loadPreset(value: string | string[] | undefined): Promise<NewSess
       repo: repo.fullName,
       baseBranch: settings.defaultBaseBranch ?? repo.defaultBranch,
       profiles: settings.defaultProfiles,
+      deliveryMode: settings.deliveryMode,
     };
   } catch {
     return null;

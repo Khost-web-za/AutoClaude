@@ -7,10 +7,11 @@ import { submitWithoutReset } from '@/feedback/form-submit';
 import { withToast } from '@/feedback/toast-host';
 import type { Profile } from '@/profiles/profile-catalog';
 import { ProfileCards } from '@/profiles/profile-cards';
+import { DeliveryModeField } from '@/sessions/delivery-mode-field';
 import { SectionLabel } from '@/ui/section-label';
 import type { RepoSettings } from './repo-settings-store';
 
-/** Default base branch and default profiles for New session. Controlled, so the input stays put after a save or a rejection. */
+/** Default base branch, delivery mode and default profiles for New session. Controlled, so the input stays put after a save or a rejection. */
 export function RepoSettingsForm({
   settings,
   githubDefaultBranch,
@@ -25,6 +26,7 @@ export function RepoSettingsForm({
   const [state, formAction, isPending] = useActionState(withToast(action), IDLE_FORM);
   const [branch, setBranch] = useState(settings.defaultBaseBranch ?? '');
   const [picked, setPicked] = useState<string[]>(settings.defaultProfiles);
+  const [deliveryMode, setDeliveryMode] = useState(settings.deliveryMode);
   const fieldErrors = state.status === 'error' ? state.fieldErrors : undefined;
 
   return (
@@ -44,6 +46,17 @@ export function RepoSettingsForm({
           </Description>
           <FieldError />
         </TextField>
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <SectionLabel>Session delivery</SectionLabel>
+        <DeliveryModeField
+          name="deliveryMode"
+          value={deliveryMode}
+          onChange={setDeliveryMode}
+          errorMessage={fieldErrors?.deliveryMode?.[0]}
+        />
+        <p className="text-sm text-muted">Pre-selected when you start a session on this repository.</p>
       </section>
 
       <section className="flex flex-col gap-4">

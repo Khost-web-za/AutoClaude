@@ -37,12 +37,12 @@ describe('repository data', () => {
         defaultProfiles: [],
         deliveryMode: 'pull_request',
       });
-      await saveRepoSettings('Acme/Widgets', { defaultBaseBranch: 'develop', defaultProfiles: ['frontend'] }, db);
-      await saveRepoSettings('Acme/Widgets', { defaultBaseBranch: null, defaultProfiles: ['seo', 'frontend'] }, db);
+      await saveRepoSettings('Acme/Widgets', { defaultBaseBranch: 'develop', defaultProfiles: ['frontend'], deliveryMode: 'pull_request' }, db);
+      await saveRepoSettings('Acme/Widgets', { defaultBaseBranch: null, defaultProfiles: ['seo', 'frontend'], deliveryMode: 'push' }, db);
       expect(await readRepoSettings('Acme/Widgets', db)).toEqual({
         defaultBaseBranch: null,
         defaultProfiles: ['seo', 'frontend'],
-        deliveryMode: 'pull_request',
+        deliveryMode: 'push',
       });
     }));
 });

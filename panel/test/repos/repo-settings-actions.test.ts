@@ -34,9 +34,10 @@ const profile = (name: string) => ({
   locked: name === 'base',
 });
 
-function form(branch: string, profiles: string[]): FormData {
+function form(branch: string, profiles: string[], deliveryMode = 'pull_request'): FormData {
   const data = new FormData();
   data.set('defaultBaseBranch', branch);
+  data.set('deliveryMode', deliveryMode);
   for (const name of profiles) data.append('profiles', name);
   data.set('$ACTION_ID_abc', '');
   return data;
@@ -61,13 +62,18 @@ describe('updateRepoSettings', () => {
     expect(saveRepoSettings).toHaveBeenCalledWith('Acme/Widgets', {
       defaultBaseBranch: 'develop',
       defaultProfiles: ['frontend', 'seo'],
+      deliveryMode: 'pull_request',
     });
     expect(revalidatePath).toHaveBeenCalledWith('/repos/Acme/Widgets/settings');
   });
 
   it('an empty branch means "the repository default"', async () => {
     await updateRepoSettings('acme/widgets', { status: 'idle' }, form('', []));
-    expect(saveRepoSettings).toHaveBeenCalledWith('Acme/Widgets', { defaultBaseBranch: null, defaultProfiles: [] });
+    expect(saveRepoSettings).toHaveBeenCalledWith('Acme/Widgets', {
+      defaultBaseBranch: null,
+      defaultProfiles: [],
+      deliveryMode: 'pull_request',
+    });
   });
 
   it('rejects unknown profiles and malformed branch names', async () => {
@@ -79,6 +85,19 @@ describe('updateRepoSettings', () => {
         fieldErrors: { defaultBaseBranch: [expect.any(String)] },
       });
     }
+    expect(saveRepoSettings).not.toHaveBeenCalled();
+  });
+
+  it('saves the push delivery mode', async () => {
+    await updateRepoSettings('acme/widgets', { status: 'idle' }, form('', [], 'push'));
+    expect(saveRepoSettings).toHaveBeenCalledWith('Acme/Widgets', expect.objectContaining({ deliveryMode: 'push' }));
+  });
+
+  it('rejects an unknown delivery mode', async () => {
+    expect(await updateRepoSettings('acme/widgets', { status: 'idle' }, form('', [], 'bogus'))).toMatchObject({
+      status: 'error',
+      fieldErrors: { deliveryMode: ['Pick pull request or push.'] },
+    });
     expect(saveRepoSettings).not.toHaveBeenCalled();
   });
 

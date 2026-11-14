@@ -4,6 +4,7 @@ import { Button, Description, FieldError, Form, Label, TextArea, TextField } fro
 import { Play } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useRef, useState, useTransition, type FormEvent, type ReactNode } from 'react';
+import type { DeliveryMode } from '@/db/schema';
 import { notifyError, notifySuccess, UNREACHABLE_MESSAGE } from '@/feedback/toast-host';
 import { planMerge } from '@/profiles/merge-plan';
 import type { Profile } from '@/profiles/profile-catalog';
@@ -12,12 +13,13 @@ import { Banner } from '@/ui/banner';
 import type { PagedOption } from '@/ui/paged-combo-box';
 import { SectionLabel } from '@/ui/section-label';
 import { BranchPicker } from './branch-picker';
+import { DeliveryModeField } from './delivery-mode-field';
 import { STARTING_TASK_MAX } from './new-session-limits';
 import { repoDefaultsAction } from './new-session-actions';
 import { RepoPicker } from './repo-picker';
 import { startSessionAction } from './session-actions';
 
-export type NewSessionPreset = { repo: string; baseBranch: string; profiles: string[] } | null;
+export type NewSessionPreset = { repo: string; baseBranch: string; profiles: string[]; deliveryMode: DeliveryMode } | null;
 
 function clashText(profiles: readonly Profile[], picked: string[]): string[] {
   try {
@@ -30,8 +32,8 @@ function clashText(profiles: readonly Profile[], picked: string[]): string[] {
 }
 
 /**
- * Repository, base branch, profiles and an optional starting task. Picking a repository fills in its
- * remembered base branch and profiles. Everything is validated again on the server; a refusal (no free
+ * Repository, base branch, delivery mode, profiles and an optional starting task. Picking a repository fills in its
+ * remembered base branch, delivery mode and profiles. Everything is validated again on the server; a refusal (no free
  * slot, low disk, no Sysbox) is toasted and the form keeps what was entered.
  */
 export function NewSessionForm({
@@ -47,6 +49,7 @@ export function NewSessionForm({
   const [repo, setRepo] = useState<PagedOption | null>(preset ? { id: preset.repo, label: preset.repo } : null);
   const [branch, setBranch] = useState<string | null>(preset?.baseBranch ?? null);
   const [picked, setPicked] = useState<string[]>(preset?.profiles ?? []);
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>(preset?.deliveryMode ?? 'pull_request');
   const [task, setTask] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [isPending, startTransition] = useTransition();
@@ -68,6 +71,7 @@ export function NewSessionForm({
         return;
       }
       setBranch(defaults.baseBranch);
+      setDeliveryMode(defaults.deliveryMode);
       setPicked(defaults.profiles.filter((name) => profiles.some((profile) => profile.name === name)));
     } catch {
       if (ticket === defaultsRequest.current) notifyError(UNREACHABLE_MESSAGE);
@@ -82,6 +86,7 @@ export function NewSessionForm({
           repoFullName: repo?.id ?? '',
           baseBranch: branch ?? '',
           profiles: picked,
+          deliveryMode,
           startingTask: task,
         });
         if (result.ok) {
@@ -106,6 +111,11 @@ export function NewSessionForm({
         <RepoPicker value={repo} onChange={(option) => void pickRepo(option)} errorMessage={error('repoFullName')} />
         <BranchPicker repo={repo?.id ?? null} value={branch} onChange={setBranch} errorMessage={error('baseBranch')} />
       </div>
+
+      <section className="flex flex-col gap-4">
+        <SectionLabel>Session delivery</SectionLabel>
+        <DeliveryModeField value={deliveryMode} onChange={setDeliveryMode} errorMessage={error('deliveryMode')} />
+      </section>
 
       <section className="flex flex-col gap-4">
         <SectionLabel>Config profiles</SectionLabel>

@@ -76,6 +76,14 @@ describe('startSession bookkeeping', () => {
       expect(calls).toEqual([`create claudecloud-session-${sessionId.slice(0, 4)}`, 'putArchive fake-1', 'start fake-1']);
     }));
 
+  it('remembering the profiles keeps a repository delivery mode already saved as push', () =>
+    withTestDb(async ({ db }) => {
+      await db.insert(repoSettings).values({ repoFullName: 'acme/widgets', defaultProfiles: [], deliveryMode: 'push' });
+      await startSession(input, testDeps(db));
+      const [defaults] = await db.select().from(repoSettings);
+      expect(defaults).toMatchObject({ defaultProfiles: ['frontend'], deliveryMode: 'push' });
+    }));
+
   it('a Docker failure marks the session failed with a detail and removes container and volume', () =>
     withTestDb(async ({ db }) => {
       const { docker, calls } = fakeDocker({ failStart: true });
