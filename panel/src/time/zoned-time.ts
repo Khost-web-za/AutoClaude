@@ -12,19 +12,26 @@ function offsetMinutes(at: Date, timeZone: string): number {
   return match[1] === '-' ? -minutes : minutes;
 }
 
+const DAY_MS = 24 * 60 * 60_000;
+
 /**
- * The instant at which the clocks in `timeZone` read `local` (`YYYY-MM-DDTHH:mm`). A time skipped by a
- * spring-forward change resolves to the instant after the gap.
+ * The instant at which the clocks in `timeZone` read `local` (`YYYY-MM-DDTHH:mm`). An ambiguous time
+ * (clocks go back) takes the first occurrence; a time skipped by a spring-forward change moves forward
+ * by the length of the gap (02:30 in a 02:00 -> 03:00 gap becomes 03:30).
  */
 export function wallTimeToInstant(local: string, timeZone: string): Date {
   const match = WALL_TIME.exec(local);
   if (!match) throw new Error(`Not a YYYY-MM-DDTHH:mm wall time: ${local}`);
   const [year, month, day, hour, minute] = match.slice(1).map(Number) as [number, number, number, number, number];
   const asUtc = Date.UTC(year, month - 1, day, hour, minute);
-  const first = asUtc - offsetMinutes(new Date(asUtc), timeZone) * 60_000;
-  // The offset at the first guess can differ from the offset at `asUtc` across a DST change.
-  const second = asUtc - offsetMinutes(new Date(first), timeZone) * 60_000;
-  return new Date(second);
+  const offsetBefore = offsetMinutes(new Date(asUtc - DAY_MS), timeZone);
+  const offsetAfter = offsetMinutes(new Date(asUtc + DAY_MS), timeZone);
+  const candidates = [...new Set([offsetBefore, offsetAfter])]
+    .map((offset) => asUtc - offset * 60_000)
+    .filter((instant) => instantToWallTime(new Date(instant), timeZone) === local)
+    .sort((x, y) => x - y);
+  // No candidate reads `local`: it falls in a gap, so apply the pre-change offset to land after it.
+  return new Date(candidates[0] ?? asUtc - offsetBefore * 60_000);
 }
 
 /** `YYYY-MM-DDTHH:mm` as the clocks in `timeZone` read at `at`. */

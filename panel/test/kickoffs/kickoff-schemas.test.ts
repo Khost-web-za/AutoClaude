@@ -7,10 +7,11 @@ const minutes = (n: number) => new Date(now.getTime() + n * 60_000);
 describe('kickoffInputSchema', () => {
   it('accepts YYYY-MM-DDTHH:mm', () => {
     expect(kickoffInputSchema.safeParse({ runAtLocal: '2026-11-15T04:00' }).success).toBe(true);
+    expect(kickoffInputSchema.safeParse({ runAtLocal: '2028-02-29T10:00' }).success).toBe(true);
   });
 
   it('rejects malformed values', () => {
-    for (const runAtLocal of ['', 'tomorrow', '2026-11-15 04:00', '2026-11-15T04:00:00Z', '2026-13-45T99:99']) {
+    for (const runAtLocal of ['', 'tomorrow', '2026-11-15 04:00', '2026-11-15T04:00:00Z', '2026-13-45T99:99', '2026-02-31T10:00', '2026-11-14T24:00', '2027-02-29T10:00', '2026-00-10T10:00']) {
       expect(kickoffInputSchema.safeParse({ runAtLocal }).success).toBe(false);
     }
     expect(kickoffInputSchema.safeParse({}).success).toBe(false);

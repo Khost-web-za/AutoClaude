@@ -12,6 +12,15 @@ describe('zoned time', () => {
     expect(wallTimeToInstant('2026-11-01T04:00', 'America/New_York').toISOString()).toBe('2026-11-01T09:00:00.000Z');
   });
 
+  it('moves a time inside a spring-forward gap forward by the gap length', () => {
+    expect(wallTimeToInstant('2026-03-08T02:30', 'America/New_York').toISOString()).toBe('2026-03-08T07:30:00.000Z');
+    expect(wallTimeToInstant('2026-03-29T02:30', 'Europe/Berlin').toISOString()).toBe('2026-03-29T01:30:00.000Z');
+  });
+
+  it('takes the first occurrence of a time repeated when clocks go back', () => {
+    expect(wallTimeToInstant('2026-11-01T01:30', 'America/New_York').toISOString()).toBe('2026-11-01T05:30:00.000Z');
+  });
+
   it('round-trips through instantToWallTime', () => {
     for (const [local, zone] of [
       ['2026-11-15T04:00', 'Africa/Johannesburg'],
