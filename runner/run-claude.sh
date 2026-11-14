@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Started by supervise.sh inside tmux. Usage: run-claude.sh first|resume
+# Started by supervise.sh inside tmux. Usage: run-claude.sh first|resume [with-message]
 # Launch command for Claude inside the session container.
 set -uo pipefail
 
@@ -7,7 +7,7 @@ args=(--permission-mode "${PERMISSION_MODE:-auto}" --remote-control "$RC_NAME")
 
 if [ "${1:-first}" = "resume" ]; then
   args=(--continue "${args[@]}")
-  if [ -s "${RESUME_MESSAGE_FILE:-}" ]; then
+  if [ "${2:-}" = with-message ] && [ -s "${RESUME_MESSAGE_FILE:-}" ]; then
     # Same byte-for-byte read as the starting task; delivered once, then deleted.
     message=$(cat "$RESUME_MESSAGE_FILE"; printf x)
     rm -f "$RESUME_MESSAGE_FILE"
