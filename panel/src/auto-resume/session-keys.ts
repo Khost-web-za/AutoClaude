@@ -4,8 +4,11 @@ import { execInRepo } from '@/sessions/container-exec';
 import type { SessionDocker } from '@/sessions/session-deps';
 
 const TMUX_SESSION = 'claude';
-/** The runner's state dir (`$STATE_DIR` in supervise.sh); the files are the Task 11 relaunch contract. */
-// The markers must be written; the tmux session may already be gone (Claude not running), which is fine.
+/**
+ * Writes the relaunch request into the runner's state dir (`$STATE_DIR` in supervise.sh; the files are the
+ * Task 11 relaunch contract), then ends the tmux session. The markers must be written; the tmux session may
+ * already be gone (Claude not running), which is fine.
+ */
 const RELAUNCH_SCRIPT =
   'printf %s "$1" | base64 -d > "$HOME/.runner/resume-message" && touch "$HOME/.runner/panel-relaunch" && { tmux kill-session -t claude 2>/dev/null || true; }';
 
