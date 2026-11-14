@@ -22,7 +22,7 @@ Env in (set by panel at container create):
 
 Callbacks (all `Authorization: Bearer $SESSION_SECRET`, `X-Session-Id: $SESSION_ID`, JSON):
 
-- `POST /api/runner/events` body `{ "type": EventType, "data": object, "at": ISO8601 }` → `204`. `EventType` = `boot_step` (`data.step`: `docker|clone|branch|config|secrets|launch`, `data.status`: `started|done|failed`, `data.error?`) · `remote_control_url` (`data.url`) · `hook` (`data.event`: `SessionStart|UserPromptSubmit|Notification|Stop`, `data.message?`) · `claude_exited` (`data.code`, `data.restarting: boolean`, `data.fatal: boolean`).
+- `POST /api/runner/events` body `{ "type": EventType, "data": object, "at": ISO8601 }` → `204`. `EventType` = `boot_step` (`data.step`: `docker|clone|branch|config|secrets|launch`, `data.status`: `started|done|failed`, `data.error?`) · `remote_control_url` (`data.url`) · `hook` (`data.event`: `SessionStart|UserPromptSubmit|Notification|Stop`, `data.message?`, `data.source?`: `startup|resume|clear|compact`, SessionStart only) � `workspace_sync` (`data.status`: `ok|skipped|failed`, `data.summary`: short git summary, credentials masked, `data.source`: SessionStart source) · `claude_exited` (`data.code`, `data.restarting: boolean`, `data.fatal: boolean`).
 - `POST /api/runner/git-credential` body `{ "repo": "owner/name" }` → `200 { "username": "x-access-token", "password": string, "expiresAt": ISO8601 }`.
 - `GET /api/runner/secrets` → `200 { "secrets": { [key: string]: string } }`.
 

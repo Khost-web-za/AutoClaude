@@ -4,6 +4,8 @@
 // Always exits 0: a reporting failure must never break boot or Claude's hooks.
 import { postEvent } from "../lib/panel-client.mjs";
 
+const SESSION_START_SOURCES = new Set(["startup", "resume", "clear", "compact"]);
+
 async function readStdin() {
   let input = "";
   for await (const chunk of process.stdin) input += chunk;
@@ -29,6 +31,7 @@ async function main() {
     // payload (tool inputs, transcript paths may carry secrets).
     data = { event: String(payload.hook_event_name ?? "unknown") };
     if (typeof payload.message === "string") data.message = payload.message;
+    if (data.event === "SessionStart" && SESSION_START_SOURCES.has(payload.source)) data.source = payload.source;
   } else if (rawData) {
     try {
       data = JSON.parse(rawData);

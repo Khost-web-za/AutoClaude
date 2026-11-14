@@ -133,3 +133,16 @@ test("hook mode gives up fast when panel is down", async () => {
     await panel.close();
   }
 });
+
+test("hook forwards SessionStart source", async () => {
+  const panel = await startFakePanel();
+  try {
+    const env = { PANEL_URL: panel.url, SESSION_ID: "sess-1", SESSION_SECRET: "secret-1" };
+    await runCli(["hook"], { env, stdin: JSON.stringify({ hook_event_name: "SessionStart", source: "clear" }) });
+    await runCli(["hook"], { env, stdin: JSON.stringify({ hook_event_name: "SessionStart", source: "evil" }) });
+    assert.equal(panel.events[0].data.source, "clear");
+    assert.equal("source" in panel.events[1].data, false);
+  } finally {
+    await panel.close();
+  }
+});
