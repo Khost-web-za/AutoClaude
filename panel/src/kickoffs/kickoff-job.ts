@@ -1,6 +1,7 @@
 import type { Db } from '@/db/client';
 import type { KickoffRow } from '@/db/schema';
 import type { LiveEvent } from '@/live/event-bus';
+import { formatHourMinute } from '@/time/clock-time';
 import type { UsageResult } from '@/usage/usage-client';
 import { effectiveWindow } from '@/usage/usage-format';
 import type { KickoffContainerResult } from './kickoff-container';
@@ -16,16 +17,6 @@ export type KickoffJobDeps = {
   publish: (event: LiveEvent) => void;
   timeZone: () => Promise<string>;
 };
-
-/** `03:12` (24 h) in the settings zone, UTC when the zone is unknown. */
-function formatHourMinute(date: Date, timeZone: string): string {
-  const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
-  try {
-    return new Intl.DateTimeFormat('en-GB', { ...options, timeZone }).format(date);
-  } catch {
-    return new Intl.DateTimeFormat('en-GB', { ...options, timeZone: 'UTC' }).format(date);
-  }
-}
 
 /** A window this run has started: its reset, or null when usage could not say. */
 type StartedWindow = { resetsAt: Date | null };

@@ -1,4 +1,5 @@
 import type { UsageResetDisplay } from '@/db/schema';
+import { formatHourMinute } from '@/time/clock-time';
 import type { UsageWindow } from './usage-types';
 
 export type UsageTone = 'ok' | 'warn' | 'danger';
@@ -65,12 +66,6 @@ const STALE_AFTER_MS = 3 * MINUTE_MS;
 /** `as of 03:12` (24 h, in the settings zone) once a reading is 3+ minutes old; null while it is fresh. */
 export function staleLabel(fetchedAt: Date, now: Date, timeZone: string): string | null {
   if (now.getTime() - fetchedAt.getTime() < STALE_AFTER_MS) return null;
-  const options: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
-  let text: string;
-  try {
-    text = new Intl.DateTimeFormat('en-GB', { ...options, timeZone }).format(fetchedAt);
-  } catch {
-    text = new Intl.DateTimeFormat('en-GB', { ...options, timeZone: 'UTC' }).format(fetchedAt);
-  }
+  const text = formatHourMinute(fetchedAt, timeZone);
   return `as of ${text}`;
 }
