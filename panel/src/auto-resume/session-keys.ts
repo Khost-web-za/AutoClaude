@@ -37,9 +37,14 @@ export async function typeIntoClaude(
   await send(deps, container, ['tmux', 'send-keys', '-t', TMUX_SESSION, 'Enter']);
 }
 
-/** The visible pane of Claude Code; throws when the tmux session is gone. */
-export async function capturePane(deps: SessionKeysDeps, container: Docker.Container): Promise<string> {
-  return send(deps, container, ['tmux', 'capture-pane', '-p', '-t', TMUX_SESSION]);
+/**
+ * The visible pane of Claude Code, or null when there is no `claude` tmux session (tmux exits non-zero: Claude
+ * is not running). Throws when the container could not be asked at all (Docker exec failed), which says
+ * nothing about Claude.
+ */
+export async function capturePane(deps: SessionKeysDeps, container: Docker.Container): Promise<string | null> {
+  const result = await execInRepo(deps.docker, container, ['tmux', 'capture-pane', '-p', '-t', TMUX_SESSION]);
+  return result.exitCode === 0 ? result.stdout : null;
 }
 
 /** Asks the runner to restart Claude with `--continue`, passing `message` as its first prompt. */

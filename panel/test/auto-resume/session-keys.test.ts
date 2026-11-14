@@ -46,9 +46,14 @@ describe('session keys', () => {
     expect(commands()).toEqual([['tmux', 'capture-pane', '-p', '-t', 'claude']]);
   });
 
-  it('throws when there is no claude session to capture', async () => {
+  it('answers null when there is no claude session to capture (tmux exits non-zero)', async () => {
     execInRepo.mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: "can't find session" });
-    await expect(capturePane(deps, container)).rejects.toThrow('Could not reach Claude in the session.');
+    await expect(capturePane(deps, container)).resolves.toBeNull();
+  });
+
+  it('throws when the container cannot be asked at all', async () => {
+    execInRepo.mockRejectedValueOnce(new Error('socket hang up'));
+    await expect(capturePane(deps, container)).rejects.toThrow('socket hang up');
   });
 
   it('passes the relaunch message as base64 argv, never in the script', async () => {

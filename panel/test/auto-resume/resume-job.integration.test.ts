@@ -300,7 +300,7 @@ describe('auto-resume job', () => {
   it('relaunches when Claude is not running', () =>
     withTestDb(async ({ db }) => {
       const row = await seed(db, waiting(0, plus(RESET, 1)));
-      const deps = setup(db, { capturePane: vi.fn(async () => Promise.reject(new Error("can't find session: claude"))) });
+      const deps = setup(db, { capturePane: vi.fn(async () => null) });
       await runResumeJob(deps, plus(RESET, 1));
       expect(deps.typeIntoClaude).not.toHaveBeenCalled();
       expect(deps.requestRelaunch).toHaveBeenCalledTimes(1);
@@ -311,6 +311,21 @@ describe('auto-resume job', () => {
       await runResumeJob(deps, plus(RESET, 21));
       expect((await load(db, row.id)).limitState).toBe('failed');
       expect(deps.requestRelaunch).toHaveBeenCalledTimes(1);
+    }));
+
+  it('a Docker exec error is not "Claude not running": it holds instead of relaunching', () =>
+    withTestDb(async ({ db }) => {
+      const row = await seed(db, waiting(0, plus(RESET, 1)));
+      const deps = setup(db, { capturePane: vi.fn(async () => Promise.reject(new Error('socket hang up'))) });
+      await runResumeJob(deps, plus(RESET, 1));
+      expect(deps.requestRelaunch).not.toHaveBeenCalled();
+      expect(deps.typeIntoClaude).not.toHaveBeenCalled();
+      expect(await load(db, row.id)).toMatchObject({
+        limitState: 'resuming',
+        resumeAttempts: 1,
+        resumeNextAt: plus(RESET, 6),
+        limitDetail: 'Waiting: could not read the session screen',
+      });
     }));
 
   it('schedules a late step from now, not in the past', () =>

@@ -19,6 +19,7 @@ const MAX_SCREEN_RESET_MS = 6 * 60 * MINUTE_MS;
 export const HOLD_DETAIL = 'Waiting: Claude is asking something';
 export const DRAFT_DETAIL = 'Waiting: the prompt has unsent text';
 export const NOT_AT_PROMPT_DETAIL = 'Waiting: Claude is not at an empty prompt';
+export const UNREADABLE_DETAIL = 'Waiting: could not read the session screen';
 export const NO_RESPONSE_DETAIL = 'Resume failed: no response after relaunch';
 
 export type ResumeStep =
@@ -36,6 +37,8 @@ export type ResumeInput = {
   screen: ScreenRead | null;
   usage: UsageSnapshot | null;
   claudeRunning: boolean;
+  /** The screen could not be read at all (Docker exec failed): nothing is known about Claude, so wait. */
+  screenUnreadable?: boolean;
 };
 
 const offset = (from: Date, minutes: number) => new Date(from.getTime() + minutes * MINUTE_MS);
@@ -60,7 +63,7 @@ export function usageBlockedUntil(usage: UsageSnapshot | null, now: Date): Date 
 
 /** What the auto-resume job does now for a session waiting out its usage limit. */
 export function planResume(input: ResumeInput): ResumeStep {
-  const { attempts, limitResetsAt, now, screen, usage, claudeRunning } = input;
+  const { attempts, limitResetsAt, now, screen, usage, claudeRunning, screenUnreadable } = input;
 
   // Still limited (a later reset on screen, or a window such as the weekly one still full): wait again for free.
   const screenReset = trustedScreenReset(screen, now);
@@ -74,10 +77,12 @@ export function planResume(input: ResumeInput): ResumeStep {
     const at = offset(limitResetsAt, minutes);
     return at.getTime() < earliest.getTime() ? earliest : at;
   };
-  if (!claudeRunning) return { kind: 'relaunch', nextAt: scheduled(GIVE_UP_OFFSET_MIN) };
-
   const nextMinutes =
     attempts === TYPED_ATTEMPTS ? GIVE_UP_OFFSET_MIN : (RESUME_OFFSETS_MIN[attempts + 1] ?? RELAUNCH_OFFSET_MIN);
+  // A transient exec error must not pass for "Claude is gone" and kill the session with a relaunch.
+  if (screenUnreadable) return { kind: 'hold', nextAt: scheduled(nextMinutes), detail: UNREADABLE_DETAIL };
+  if (!claudeRunning) return { kind: 'relaunch', nextAt: scheduled(GIVE_UP_OFFSET_MIN) };
+
   // Never type over (or relaunch away) a question Claude is asking, or text the user has not sent.
   const waitingOn = screen?.blocking ? HOLD_DETAIL : screen?.promptDraft ? DRAFT_DETAIL : null;
   if (waitingOn) return { kind: 'hold', nextAt: scheduled(nextMinutes), detail: waitingOn };

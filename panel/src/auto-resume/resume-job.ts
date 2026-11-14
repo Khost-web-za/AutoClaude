@@ -22,7 +22,8 @@ const CAPTURE_CONCURRENCY = 4;
 
 export type ResumeJobDeps = {
   db: Db;
-  capturePane: (containerId: string) => Promise<string>;
+  /** The visible pane, or null when Claude's tmux session is gone; throws when the container cannot be asked. */
+  capturePane: (containerId: string) => Promise<string | null>;
   typeIntoClaude: (containerId: string, text: string, opts?: { escapeFirst?: boolean }) => Promise<void>;
   requestRelaunch: (containerId: string, message: string) => Promise<void>;
   getUsage: () => Promise<UsageResult>;
@@ -33,7 +34,7 @@ export type ResumeJobDeps = {
   containerTimeZone: string;
 };
 
-type PaneRead = { screen: ScreenRead | null; claudeRunning: boolean };
+type PaneRead = { screen: ScreenRead | null; claudeRunning: boolean; unreadable: boolean };
 
 type RunContext = {
   deps: ResumeJobDeps;
@@ -86,10 +87,12 @@ export async function runResumeJob(deps: ResumeJobDeps, now: Date): Promise<void
       limit(async () => {
         try {
           const pane = await deps.capturePane(containerId);
-          return { screen: readScreen(pane, now, deps.containerTimeZone), claudeRunning: true };
+          // No `claude` tmux session: Claude is not running.
+          if (pane === null) return { screen: null, claudeRunning: false, unreadable: false };
+          return { screen: readScreen(pane, now, deps.containerTimeZone), claudeRunning: true, unreadable: false };
         } catch {
-          // No `claude` tmux session (or no container to ask): Claude is not running.
-          return { screen: null, claudeRunning: false };
+          // Docker could not be asked: that says nothing about Claude.
+          return { screen: null, claudeRunning: false, unreadable: true };
         }
       }),
   };
@@ -231,6 +234,7 @@ async function resumeOne(ctx: RunContext, row: DueRow, message: string): Promise
     screen: pane.screen,
     usage,
     claudeRunning: pane.claudeRunning,
+    screenUnreadable: pane.unreadable,
   });
   const values = await takeStep(deps, row, containerId, step, message, pane.screen?.limitMenu ?? false);
 

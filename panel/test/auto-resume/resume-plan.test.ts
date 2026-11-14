@@ -112,6 +112,15 @@ describe('planResume', () => {
     });
   });
 
+  it('holds, never relaunches, when the screen could not be read', () => {
+    const unreadable = { kind: 'hold', nextAt: plus(RESET, 6), detail: 'Waiting: could not read the session screen' };
+    expect(planResume(input({ screen: null, claudeRunning: false, screenUnreadable: true }))).toEqual(unreadable);
+    expect(planResume(input({ attempts: 3, now: plus(RESET, 18), screen: null, claudeRunning: false, screenUnreadable: true }))).toEqual({
+      ...unreadable,
+      nextAt: plus(RESET, 21),
+    });
+  });
+
   it('relaunches straight away when Claude is not running', () => {
     expect(planResume(input({ screen: null, claudeRunning: false }))).toEqual({ kind: 'relaunch', nextAt: plus(RESET, 21) });
   });
