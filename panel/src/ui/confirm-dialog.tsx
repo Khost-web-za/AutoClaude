@@ -4,13 +4,13 @@ import { AlertDialog, Button, Input, Label, TextField } from '@heroui/react';
 import { useState, type ReactNode } from 'react';
 
 export interface ConfirmDialogProps {
-  trigger: string;
+  trigger: ReactNode;
   title: string;
   description: ReactNode;
   confirmLabel: string;
   danger?: boolean;
   /** Trigger style; defaults to danger/secondary by `danger`. `danger-soft` suits a button repeated on every list row. */
-  triggerVariant?: 'danger' | 'danger-soft' | 'secondary' | 'ghost';
+  triggerVariant?: 'danger' | 'danger-soft' | 'secondary' | 'tertiary' | 'ghost';
   /** The confirm button stays disabled until this text is typed (the server must still check it). */
   typeToConfirm?: string;
   isDisabled?: boolean;
@@ -47,7 +47,7 @@ export function ConfirmDialog(props: ConfirmDialogProps) {
         setOpen(open);
       }}
     >
-      <Button variant={triggerVariant ?? (danger ? 'danger' : 'secondary')} isDisabled={isDisabled} className="min-h-11">
+      <Button variant={triggerVariant ?? (danger ? 'danger' : 'secondary')} isDisabled={isDisabled} className="min-h-11 gap-2">
         {trigger}
       </Button>
       <AlertDialog.Backdrop>

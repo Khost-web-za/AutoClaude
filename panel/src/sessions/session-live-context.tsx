@@ -4,10 +4,10 @@ import { createContext, use, useOptimistic, useTransition, type ReactNode } from
 import type { SessionStatus } from '@/db/schema';
 import { notifyError, notifySuccess, UNREACHABLE_MESSAGE } from '@/feedback/toast-host';
 import { openableRemoteUrl } from './display-status';
-import { restartSessionAction, stopSessionAction } from './session-actions';
+import { clearSessionAction, restartSessionAction, stopSessionAction } from './session-actions';
 import { useLiveSessionPatches } from './use-live-sessions';
 
-export type SessionCommand = 'stop' | 'restart' | 'delete';
+export type SessionCommand = 'stop' | 'restart' | 'clear' | 'delete';
 
 export type SessionSnapshot = {
   id: string;
@@ -28,11 +28,14 @@ type SessionLive = SessionSnapshot & {
 
 const Context = createContext<SessionLive | null>(null);
 
-const OPTIMISTIC: Record<SessionCommand, SessionStatus> = { stop: 'stopped', restart: 'starting', delete: 'stopped' };
+/** Clear has none: the status stays until Claude's own hooks report it. */
+const OPTIMISTIC: Partial<Record<SessionCommand, SessionStatus>> = { stop: 'stopped', restart: 'starting', delete: 'stopped' };
+
+const ACTIONS = { stop: stopSessionAction, restart: restartSessionAction, clear: clearSessionAction } as const;
 
 /**
  * One session's status for its header, controls and mobile action bar: server-rendered, patched by
- * `session` live events, and overridden optimistically while Stop or Restart runs. A refusal rolls the
+ * `session` live events, and overridden optimistically while Stop or Restart runs (Clear changes no status). A refusal rolls the
  * status back (the transition ends) and toasts why; success arrives as the action's revalidated page.
  */
 export function SessionLiveProvider({ session, children }: { session: SessionSnapshot; children: ReactNode }) {
@@ -46,7 +49,8 @@ export function SessionLiveProvider({ session, children }: { session: SessionSna
 
   function track(command: SessionCommand, task: () => Promise<void>) {
     startTransition(async () => {
-      setOptimisticStatus(OPTIMISTIC[command]);
+      const optimistic = OPTIMISTIC[command];
+      if (optimistic) setOptimisticStatus(optimistic);
       setPendingCommand(command);
       await task();
     });
@@ -55,7 +59,7 @@ export function SessionLiveProvider({ session, children }: { session: SessionSna
   function run(command: Exclude<SessionCommand, 'delete'>) {
     track(command, async () => {
       try {
-        const result = await (command === 'stop' ? stopSessionAction(session.id) : restartSessionAction(session.id));
+        const result = await ACTIONS[command](session.id);
         if (result.ok) notifySuccess(result.message);
         else notifyError(result.message);
       } catch {

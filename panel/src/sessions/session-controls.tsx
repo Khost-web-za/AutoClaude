@@ -2,6 +2,7 @@
 
 import { Button } from '@heroui/react';
 import { RotateCcw, Square } from 'lucide-react';
+import { ClearSessionDialog } from './clear-session-dialog';
 import { holdsRunningSlot } from './running-statuses';
 import { DeleteSessionDialog } from './delete-session-dialog';
 import { useSessionLive } from './session-live-context';
@@ -38,6 +39,7 @@ function SessionButtons({ compact }: { compact: boolean }) {
           {running ? 'Restart' : 'Start again'}
         </Button>
       ) : null}
+      {running ? <ClearSessionDialog /> : null}
       <DeleteSessionDialog />
     </>
   );

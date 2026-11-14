@@ -10,6 +10,7 @@ import { listProfiles } from '@/profiles/profile-catalog';
 import { assertRepoAccessible, repoAccessFailure } from '@/repos/repo-access';
 import { readRepoSettings } from '@/repos/repo-settings-store';
 import { CapacityError, InsufficientDiskError, StartBlockedError, SysboxCheckFailedError, SysboxMissingError } from './capacity';
+import { clearSession } from './clear-session';
 import { deleteSession, DeleteNeedsConfirmationError } from './delete-session';
 import { refreshGitState } from './git-state';
 import { validateNewSession } from './new-session-schema';
@@ -119,6 +120,18 @@ export async function restartSessionAction(id: unknown): Promise<SessionActionRe
   }
   revalidateSessions();
   return { ok: true, message: 'Session restarting.' };
+}
+
+/** Types /clear into an idle session's Claude; the runner then syncs the workspace with the remote. */
+export async function clearSessionAction(id: unknown): Promise<SessionActionResult> {
+  await requireOwner();
+  if (typeof id !== 'string' || !isSessionId(id)) return invalidId;
+  try {
+    await clearSession(id);
+  } catch (error) {
+    return failure('clear the conversation', error);
+  }
+  return { ok: true, message: 'Conversation cleared. The workspace will sync with the remote.' };
 }
 
 /**

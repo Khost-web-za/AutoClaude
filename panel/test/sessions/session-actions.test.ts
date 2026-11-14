@@ -8,6 +8,7 @@ const revalidatePath = vi.fn();
 const startSession = vi.fn();
 const restartSession = vi.fn();
 const stopSession = vi.fn();
+const clearSession = vi.fn();
 const deleteSession = vi.fn();
 const refreshGitState = vi.fn();
 const assertRepoAccessible = vi.fn();
@@ -19,6 +20,7 @@ vi.mock('next/cache', () => ({ revalidatePath }));
 vi.mock('@/env/panel-env', () => ({ getPanelEnv: () => ({ configsDir: '/configs' }) }));
 vi.mock('@/sessions/start-session', () => ({ startSession, restartSession }));
 vi.mock('@/sessions/stop-session', () => ({ stopSession }));
+vi.mock('@/sessions/clear-session', () => ({ clearSession }));
 vi.mock('@/sessions/delete-session', async (importOriginal) => ({
   ...(await importOriginal<typeof DeleteModule>()),
   deleteSession,
@@ -34,11 +36,11 @@ vi.mock('@/profiles/profile-catalog', async (importOriginal) => ({
   listProfiles,
 }));
 
-const { BranchBusyError, CapacityError, InsufficientDiskError, SysboxMissingError } = await import('@/sessions/capacity');
+const { BranchBusyError, CapacityError, StartBlockedError, InsufficientDiskError, SysboxMissingError } = await import('@/sessions/capacity');
 const { DeleteNeedsConfirmationError } = await import('@/sessions/delete-session');
 const { SessionNotFoundError } = await import('@/sessions/session-record');
 const { StackDiscoveryError } = await import('@/docker/self-discovery');
-const { deleteSessionAction, restartSessionAction, startSessionAction, stopSessionAction } = await import(
+const { clearSessionAction, deleteSessionAction, restartSessionAction, startSessionAction, stopSessionAction } = await import(
   '@/sessions/session-actions'
 );
 
@@ -169,5 +171,38 @@ describe('stop and restart', () => {
     const refusal = new StackDiscoveryError('Refusing to put sessions on network "uuid": it also holds docker-proxy.');
     restartSession.mockRejectedValueOnce(refusal);
     expect(await restartSessionAction(SESSION_ID)).toEqual({ ok: false, reason: 'blocked', message: refusal.message });
+  });
+});
+
+describe('clearSessionAction', () => {
+  it('rejects a non-owner before anything else', async () => {
+    requireOwner.mockRejectedValueOnce(new Error('NEXT_HTTP_ERROR_FALLBACK;403'));
+    await expect(clearSessionAction(SESSION_ID)).rejects.toThrow('403');
+    expect(clearSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid id', async () => {
+    expect(await clearSessionAction('nope')).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(await clearSessionAction(42)).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(clearSession).not.toHaveBeenCalled();
+  });
+
+  it('clears and reports the sync', async () => {
+    expect(await clearSessionAction(SESSION_ID)).toEqual({
+      ok: true,
+      message: 'Conversation cleared. The workspace will sync with the remote.',
+    });
+    expect(clearSession).toHaveBeenCalledWith(SESSION_ID);
+  });
+
+  it('maps errors like the other actions', async () => {
+    const refusal = new StartBlockedError('Claude can only be cleared while it is idle.');
+    clearSession.mockRejectedValueOnce(refusal);
+    expect(await clearSessionAction(SESSION_ID)).toEqual({ ok: false, reason: 'blocked', message: refusal.message });
+    clearSession.mockRejectedValueOnce(new SessionNotFoundError(SESSION_ID));
+    expect(await clearSessionAction(SESSION_ID)).toMatchObject({ ok: false, reason: 'not-found' });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    clearSession.mockRejectedValueOnce(new Error('boom'));
+    expect(await clearSessionAction(SESSION_ID)).toMatchObject({ ok: false, reason: 'unavailable' });
   });
 });
