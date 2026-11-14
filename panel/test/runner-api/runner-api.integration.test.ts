@@ -119,6 +119,19 @@ describe('runner api', () => {
       expect(res.status).toBe(204);
     }));
 
+  it('keeps the event but not the status when reviving a push session would collide with a live one', () =>
+    setup(async ({ db, id, call }) => {
+      const push = { repoFullName: 'acme/widgets', baseBranch: 'main', workBranch: 'main', defaultBranch: 'main', deliveryMode: 'push' as const };
+      await db.update(sessions).set({ ...push, status: 'stopped' }).where(eq(sessions.id, id));
+      await db.insert(sessions).values({ ...push, status: 'idle', secretHash: hashSessionSecret('other') });
+      const res = await call('/api/runner/events', { body: event('boot_step', { step: 'docker', status: 'started' }) });
+      expect(res.status).toBe(204);
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, id));
+      expect(row?.status).toBe('stopped');
+      const events = await db.select().from(sessionEvents).where(eq(sessionEvents.sessionId, id));
+      expect(events.map((e) => e.type)).toEqual(['boot_step']);
+    }));
+
   it('400 on invalid body, 404 on unknown route', () =>
     setup(async ({ call }) => {
       expect((await call('/api/runner/events', { body: { type: 'bogus', data: {}, at: 'x' } })).status).toBe(400);

@@ -41,7 +41,7 @@ export async function execInRepo(docker: SessionDocker, container: Docker.Contai
         stream.on('error', reject);
       }),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('git command timed out')), EXEC_DEADLINE_MS);
+        timer = setTimeout(() => reject(new Error('container command timed out')), EXEC_DEADLINE_MS);
       }),
     ]);
   } finally {

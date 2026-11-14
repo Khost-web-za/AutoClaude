@@ -60,6 +60,7 @@ export function NewSessionForm({
   async function pickRepo(option: PagedOption | null) {
     setRepo(option);
     setBranch(null);
+    setDeliveryMode('pull_request');
     setFieldErrors(({ repoFullName: _repo, baseBranch: _branch, ...rest }) => rest);
     const ticket = ++defaultsRequest.current;
     if (!option) return;
@@ -137,7 +138,7 @@ export function NewSessionForm({
         </Label>
         <TextArea rows={5} placeholder="What should Claude work on first?" className="min-h-32" />
         <Description>
-          Also names the working branch. {task.length.toLocaleString('en-US')} / {STARTING_TASK_MAX.toLocaleString('en-US')}
+          {deliveryMode === 'push' ? '' : 'Also names the working branch. '}{task.length.toLocaleString('en-US')} / {STARTING_TASK_MAX.toLocaleString('en-US')}
         </Description>
         <FieldError>{error('startingTask')}</FieldError>
       </TextField>

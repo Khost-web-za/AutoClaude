@@ -53,22 +53,24 @@ export default async function SessionChangesPage({ params, searchParams }: Props
 
   return (
     <div className="flex max-w-4xl flex-col gap-12">
-      <section className="flex flex-col gap-4">
-        <SectionLabel>Pull request</SectionLabel>
-        {changes.state.prUrl ? (
-          <a
-            href={changes.state.prUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-11 items-center gap-2 self-start font-semibold break-all text-link underline-offset-4 hover:underline"
-          >
-            <ExternalLink aria-hidden className="size-4 shrink-0" />
-            {changes.state.prUrl.replace(/^https:\/\/(www\.)?/, '')}
-          </a>
-        ) : (
-          <p className="text-sm text-muted">No pull request for this branch yet.</p>
+      {session.deliveryMode !== 'push' && (
+        <section className="flex flex-col gap-4">
+          <SectionLabel>Pull request</SectionLabel>
+          {changes.state.prUrl ? (
+            <a
+              href={changes.state.prUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 items-center gap-2 self-start font-semibold break-all text-link underline-offset-4 hover:underline"
+            >
+              <ExternalLink aria-hidden className="size-4 shrink-0" />
+              {changes.state.prUrl.replace(/^https:\/\/(www\.)?/, '')}
+            </a>
+          ) : (
+            <p className="text-sm text-muted">No pull request for this branch yet.</p>
         )}
       </section>
+      )}
 
       <section className="flex flex-col gap-4">
         <SectionLabel>Unpushed commits · {changes.commits.length}</SectionLabel>

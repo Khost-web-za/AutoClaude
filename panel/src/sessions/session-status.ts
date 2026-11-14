@@ -34,6 +34,8 @@ export function nextStatus(current: SessionStatus, event: RunnerEvent): StatusCh
     case 'hook':
       switch (data.event) {
         case 'SessionStart':
+          // /clear starts a fresh conversation but runs no turn, so no Stop would ever follow: stay as we are.
+          return data.source === 'clear' ? null : { status: 'working' };
         case 'UserPromptSubmit':
           return { status: 'working' };
         case 'Notification': {

@@ -122,3 +122,23 @@ test("push mode on a non-default branch allows its own branch but asks for the d
   assert.equal(classifyCommand("git push origin dev", "main", "dev", opts).decision, "allow");
   assert.equal(classifyCommand("git push origin dev:main", "main", "dev", opts).decision, "ask");
 });
+
+async function guardDecision(env, command) {
+  const cwd = repoOnBranch("main");
+  const res = await runCli("guard-push.mjs", [], {
+    env: { DEFAULT_BRANCH: "main", ...env },
+    stdin: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", cwd, tool_input: { command } }),
+  });
+  assert.equal(res.code, 0, res.stderr);
+  return res.stdout === "" ? "allow" : JSON.parse(res.stdout).hookSpecificOutput.permissionDecision;
+}
+
+test("cli reads DELIVERY_MODE=push and WORK_BRANCH to allow pushing the session's own branch", async () => {
+  assert.equal(await guardDecision({ DELIVERY_MODE: "push", WORK_BRANCH: "main" }, "git push origin main"), "allow");
+  assert.equal(await guardDecision({ DELIVERY_MODE: "push", WORK_BRANCH: "main" }, "git push -f origin main"), "ask");
+});
+
+test("cli still asks for a default-branch push without push mode", async () => {
+  assert.equal(await guardDecision({ WORK_BRANCH: "main" }, "git push origin main"), "ask");
+  assert.equal(await guardDecision({ DELIVERY_MODE: "pull_request", WORK_BRANCH: "main" }, "git push origin main"), "ask");
+});

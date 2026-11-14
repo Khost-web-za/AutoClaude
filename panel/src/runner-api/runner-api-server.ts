@@ -8,6 +8,7 @@ import { GithubApiError } from '@/github/github-api';
 import { NoInstallationError } from '@/github/tokens';
 import { eventBus } from '@/live/event-bus';
 import { secretStore as sharedSecretStore, type SecretStore } from '@/secret-store/secret-store';
+import { isBranchBusyViolation } from '@/sessions/capacity';
 import { nextStatus, redactEventData, type RunnerEvent } from '@/sessions/session-status';
 import { verifySession, type Session } from './session-auth';
 
@@ -86,18 +87,28 @@ export function createRunnerApiServer(deps: RunnerApiDeps): http.Server {
       // A url arriving after Stop belongs to a session that is no longer running: keep the row as it is.
       const remoteControlUrl = typeof url === 'string' && url && status !== 'stopped' ? url : undefined;
       if (!next && !remoteControlUrl) return null;
-      await tx
-        .update(sessions)
-        .set({
-          status,
-          statusDetail: next ? (next.detail ?? null) : row.statusDetail,
-          ...(remoteControlUrl ? { remoteControlUrl } : {}),
-          ...(next?.status === 'starting' ? { endedAt: null, remoteControlUrl: null } : {}),
-          ...(next?.status === 'working' || next?.status === 'starting'
-            ? { startedAt: sql`coalesce(${sessions.startedAt}, now())` }
-            : {}),
-        })
-        .where(eq(sessions.id, session.id));
+      try {
+        // A savepoint: a violation aborts only this update, so the event row above still commits.
+        await tx.transaction(async (savepoint) => {
+          await savepoint
+            .update(sessions)
+            .set({
+              status,
+              statusDetail: next ? (next.detail ?? null) : row.statusDetail,
+              ...(remoteControlUrl ? { remoteControlUrl } : {}),
+              ...(next?.status === 'starting' ? { endedAt: null, remoteControlUrl: null } : {}),
+              ...(next?.status === 'working' || next?.status === 'starting'
+                ? { startedAt: sql`coalesce(${sessions.startedAt}, now())` }
+                : {}),
+            })
+            .where(eq(sessions.id, session.id));
+        });
+      } catch (error) {
+        // Bringing a stopped/failed push session back to life can collide with another live session on the
+        // branch. Keep the event without the status change; reconcile then stops the container as usual.
+        if (isBranchBusyViolation(error)) return null;
+        throw error;
+      }
       return { status, detail: next?.detail, remoteControlUrl };
     });
 

@@ -21,7 +21,7 @@ export function maskCredentials(text) {
 
 function git(repoDir, args, timeout = PULL_TIMEOUT_MS) {
   return new Promise((resolve) => {
-    execFile("git", ["-C", repoDir, ...args], { timeout, windowsHide: true }, (err, stdout, stderr) => {
+    execFile("git", ["-C", repoDir, ...args], { timeout, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }, (err, stdout, stderr) => {
       resolve({ ok: !err, stdout: String(stdout).trim(), stderr: String(stderr).trim(), err });
     });
   });

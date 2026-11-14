@@ -23,10 +23,11 @@ beforeEach(() => {
 });
 
 describe('clearSession', () => {
-  it('sends /clear then Enter to the claude tmux session', async () => {
+  it('empties the input line, sends /clear, then Enter to the claude tmux session', async () => {
     await clearSession('s1', deps);
     expect(getContainer).toHaveBeenCalledWith('c1');
     expect(execInRepo.mock.calls.map(([, c, cmd]) => [c, cmd])).toEqual([
+      [container, ['tmux', 'send-keys', '-t', 'claude', 'C-u']],
       [container, ['tmux', 'send-keys', '-t', 'claude', '-l', '/clear']],
       [container, ['tmux', 'send-keys', '-t', 'claude', 'Enter']],
     ]);
@@ -49,7 +50,7 @@ describe('clearSession', () => {
     execInRepo.mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: 'no server' });
     await expect(clearSession('s1', deps)).rejects.toThrow('Could not reach Claude in the session.');
     expect(execInRepo).toHaveBeenCalledTimes(1);
-    execInRepo.mockResolvedValueOnce(ok).mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' });
+    execInRepo.mockResolvedValueOnce(ok).mockResolvedValueOnce(ok).mockResolvedValueOnce({ exitCode: 1, stdout: '', stderr: '' });
     await expect(clearSession('s1', deps)).rejects.toBeInstanceOf(StartBlockedError);
   });
 });

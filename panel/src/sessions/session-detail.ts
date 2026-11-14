@@ -2,7 +2,7 @@ import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import { cache } from 'react';
 import { db as sharedDb, type Db } from '@/db/client';
 import { paginate, type PageResult } from '@/db/pagination';
-import { sessionEvents, sessionProfiles, sessions, type SessionGitState, type SessionStatus } from '@/db/schema';
+import { sessionEvents, sessionProfiles, sessions, type DeliveryMode, type SessionGitState, type SessionStatus } from '@/db/schema';
 import { isSessionId } from './session-record';
 
 const RECENT_EVENTS = 5;
@@ -13,6 +13,7 @@ export type SessionView = {
   repoFullName: string;
   baseBranch: string;
   workBranch: string;
+  deliveryMode: DeliveryMode;
   startingTask: string | null;
   status: SessionStatus;
   statusDetail: string | null;
@@ -38,6 +39,7 @@ export async function loadSessionView(id: string, conn: Db = sharedDb): Promise<
         repoFullName: sessions.repoFullName,
         baseBranch: sessions.baseBranch,
         workBranch: sessions.workBranch,
+        deliveryMode: sessions.deliveryMode,
         startingTask: sessions.startingTask,
         status: sessions.status,
         statusDetail: sessions.statusDetail,

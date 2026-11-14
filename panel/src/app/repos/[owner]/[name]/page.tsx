@@ -59,7 +59,7 @@ export default async function RepoSessionsPage({ params, searchParams }: Props) 
               <span className="flex min-w-0 flex-1 flex-col gap-1">
                 <span className="truncate text-white">{session.startingTask ?? 'No starting task'}</span>
                 <span className="truncate font-mono text-xs text-text-subtle">
-                  {session.workBranch} ← {session.baseBranch}
+                  {session.workBranch === session.baseBranch ? session.workBranch : `${session.workBranch} ← ${session.baseBranch}`}
                 </span>
               </span>
               <span className="text-xs text-text-subtle">{formatAgo(session.createdAt, now)}</span>
