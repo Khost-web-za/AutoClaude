@@ -1,6 +1,6 @@
-import { FolderGit2, Layers, LayoutList, Plug, Plus, Settings, type LucideIcon } from 'lucide-react';
+import { CalendarClock, FolderGit2, Layers, LayoutList, Plug, Plus, Settings, type LucideIcon } from 'lucide-react';
 
-export type NavKey = 'sessions' | 'new-session' | 'repos' | 'connections' | 'configs' | 'settings';
+export type NavKey = 'sessions' | 'new-session' | 'repos' | 'schedule' | 'connections' | 'configs' | 'settings';
 export type NavGroupKey = 'work' | 'setup';
 
 export interface NavEntry {
@@ -25,6 +25,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
       { key: 'sessions', label: 'Sessions', href: '/', icon: LayoutList },
       { key: 'new-session', label: 'New session', href: '/sessions/new', icon: Plus },
       { key: 'repos', label: 'Repositories', href: '/repos', icon: FolderGit2 },
+      { key: 'schedule', label: 'Schedule', href: '/schedule', icon: CalendarClock },
     ],
   },
   {
@@ -40,6 +41,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 
 const PREFIX_ENTRIES = [
   { prefix: '/repos', key: 'repos' },
+  { prefix: '/schedule', key: 'schedule' },
   { prefix: '/connections', key: 'connections' },
   { prefix: '/configs', key: 'configs' },
   { prefix: '/settings', key: 'settings' },
