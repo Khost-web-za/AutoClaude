@@ -22,7 +22,7 @@ export function SessionCards({ rows, now, timeZone }: { rows: readonly SessionLi
           <div className="flex items-center justify-between gap-3">
             <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
               <StatusDot status={dotStatus(row.status)} showLabel />
-              <LimitBadge state={row.limitState} resumeAt={row.limitResetsAt} detail={row.limitDetail} timeZone={timeZone} />
+              <LimitBadge state={row.limitState} resumeAt={row.resumeAt} detail={row.limitDetail} timeZone={timeZone} />
             </span>
             <span className="text-xs text-text-subtle tabular-nums">{formatAge(row.createdAt, now)}</span>
           </div>

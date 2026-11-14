@@ -31,7 +31,7 @@ export default async function SessionLayout({ children, params }: SessionRoutePa
         hasContainer: session.containerId !== null,
         autoResume: session.autoResume,
         limitState: session.limitState,
-        limitResetsAt: session.limitResetsAt,
+        resumeAt: session.resumeAt,
         limitDetail: session.limitDetail,
         timeZone: settings.timeZone,
       }}

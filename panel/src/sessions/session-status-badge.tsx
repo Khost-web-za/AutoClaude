@@ -36,6 +36,6 @@ export function LiveOpenInClaude({ className }: { className?: string }) {
 
 /** The header's limit / resume badge, next to the status pill. */
 export function SessionLimitBadge() {
-  const { limitState, limitResetsAt, limitDetail, timeZone } = useSessionLive();
-  return <LimitBadge state={limitState} resumeAt={limitResetsAt} detail={limitDetail} timeZone={timeZone} />;
+  const { limitState, resumeAt, limitDetail, timeZone } = useSessionLive();
+  return <LimitBadge state={limitState} resumeAt={resumeAt} detail={limitDetail} timeZone={timeZone} />;
 }

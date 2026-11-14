@@ -49,7 +49,7 @@ export function SessionTable({ rows, now, timeZone }: { rows: readonly SessionLi
                 <Table.Cell>
                   <div className="flex flex-col items-start gap-1.5">
                     <StatusDot status={dotStatus(row.status)} showLabel />
-                    <LimitBadge state={row.limitState} resumeAt={row.limitResetsAt} detail={row.limitDetail} timeZone={timeZone} />
+                    <LimitBadge state={row.limitState} resumeAt={row.resumeAt} detail={row.limitDetail} timeZone={timeZone} />
                   </div>
                 </Table.Cell>
                 <Table.Cell>

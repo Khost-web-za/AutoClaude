@@ -73,11 +73,11 @@ export function useLiveLimitPatches(source: unknown): LiveLimitPatches {
   return state.source === source ? state.patches : NO_LIMITS;
 }
 
-type LimitFields = { id: string; limitState: LimitState; limitResetsAt: Date | null; limitDetail: string | null };
+type LimitFields = { id: string; limitState: LimitState; resumeAt: Date | null; limitDetail: string | null };
 
 /** A row with its live limit patch applied. */
 export function withLiveLimitPatch<T extends LimitFields>(row: T, patches: LiveLimitPatches): T {
   const patch = patches.get(row.id);
   if (!patch) return row;
-  return { ...row, limitState: patch.limitState, limitResetsAt: patch.resumeAt, limitDetail: patch.detail };
+  return { ...row, limitState: patch.limitState, resumeAt: patch.resumeAt, limitDetail: patch.detail };
 }

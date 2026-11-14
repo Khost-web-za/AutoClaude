@@ -55,6 +55,17 @@ describe('session list', () => {
       expect(await countSessionTabs('gadgets', db)).toEqual({ active: 1, waiting: 0, stopped: 1, all: 2 });
     }));
 
+  it('shows the time the resume runs (reset + 1 min), not the reset itself, in the list and the detail', () =>
+    withTestDb(async ({ db }) => {
+      const [row] = await seed(db, [{ status: 'idle' }]);
+      const reset = new Date('2026-11-15T03:00:00Z');
+      const resumeAt = new Date('2026-11-15T03:01:00Z');
+      await db.update(sessions).set({ limitState: 'limited', limitResetsAt: reset, resumeNextAt: resumeAt });
+      const list = await listSessions({ tab: 'all', query: '', page: 1 }, db);
+      expect(list.items[0]).toMatchObject({ limitState: 'limited', resumeAt });
+      expect(await loadSessionView(row!.id, db)).toMatchObject({ limitState: 'limited', resumeAt });
+    }));
+
   it('pages by 20', () =>
     withTestDb(async ({ db }) => {
       await seed(db, Array.from({ length: 23 }, () => ({ status: 'stopped' as const })));

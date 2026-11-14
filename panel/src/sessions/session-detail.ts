@@ -21,7 +21,8 @@ export type SessionView = {
   remoteControlUrl: string | null;
   autoResume: boolean;
   limitState: LimitState;
-  limitResetsAt: Date | null;
+  /** When the next resume step runs ("resumes 03:01"). */
+  resumeAt: Date | null;
   limitDetail: string | null;
   gitState: SessionGitState | null;
   createdAt: Date;
@@ -51,7 +52,7 @@ export async function loadSessionView(id: string, conn: Db = sharedDb): Promise<
         remoteControlUrl: sessions.remoteControlUrl,
         autoResume: sessions.autoResume,
         limitState: sessions.limitState,
-        limitResetsAt: sessions.limitResetsAt,
+        resumeAt: sessions.resumeNextAt,
         limitDetail: sessions.limitDetail,
         gitState: sessions.gitState,
         createdAt: sessions.createdAt,

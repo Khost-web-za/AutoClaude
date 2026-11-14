@@ -15,7 +15,8 @@ export type SessionListRow = {
   gitState: SessionGitState | null;
   remoteControlUrl: string | null;
   limitState: LimitState;
-  limitResetsAt: Date | null;
+  /** When the next resume step runs ("resumes 03:01"). */
+  resumeAt: Date | null;
   limitDetail: string | null;
   createdAt: Date;
 };
@@ -57,7 +58,7 @@ export function listSessions(
           gitState: sessions.gitState,
           remoteControlUrl: sessions.remoteControlUrl,
           limitState: sessions.limitState,
-          limitResetsAt: sessions.limitResetsAt,
+          resumeAt: sessions.resumeNextAt,
           limitDetail: sessions.limitDetail,
           createdAt: sessions.createdAt,
         })

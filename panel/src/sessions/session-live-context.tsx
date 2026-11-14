@@ -19,7 +19,7 @@ export type SessionSnapshot = {
   hasContainer: boolean;
   autoResume: boolean;
   limitState: LimitState;
-  limitResetsAt: Date | null;
+  resumeAt: Date | null;
   limitDetail: string | null;
   /** The settings time zone, for the limit badge's resume time. */
   timeZone: string;
@@ -48,7 +48,7 @@ const ACTIONS = { stop: stopSessionAction, restart: restartSessionAction, clear:
 export function SessionLiveProvider({ session, children }: { session: SessionSnapshot; children: ReactNode }) {
   // Keyed by value: a refresh that brings the same server state keeps a newer live patch.
   const patches = useLiveSessionPatches(`${session.status}|${session.statusDetail}|${session.remoteControlUrl}`);
-  const limitPatches = useLiveLimitPatches(`${session.limitState}|${session.limitResetsAt?.getTime()}|${session.limitDetail}`);
+  const limitPatches = useLiveLimitPatches(`${session.limitState}|${session.resumeAt?.getTime()}|${session.limitDetail}`);
   const patch = patches.get(session.id);
   const limitPatch = limitPatches.get(session.id);
   const liveStatus = patch?.status ?? session.status;
@@ -84,7 +84,7 @@ export function SessionLiveProvider({ session, children }: { session: SessionSna
     statusDetail: patch ? patch.detail : session.statusDetail,
     remoteControlUrl,
     limitState: limitPatch?.limitState ?? session.limitState,
-    limitResetsAt: limitPatch ? limitPatch.resumeAt : session.limitResetsAt,
+    resumeAt: limitPatch ? limitPatch.resumeAt : session.resumeAt,
     limitDetail: limitPatch ? limitPatch.detail : session.limitDetail,
     pending: pendingCommand,
     run,
