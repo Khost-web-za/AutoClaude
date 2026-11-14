@@ -20,6 +20,9 @@ function setup() {
   const other = join(base, "other");
   execFileSync("git", ["clone", "-q", origin, repo]);
   execFileSync("git", ["clone", "-q", origin, other]);
+  // The real runner sets a global identity in entrypoint.sh; rebasing needs one.
+  git(repo, "config", "user.name", "Test");
+  git(repo, "config", "user.email", "test@example.com");
   return { repo, other };
 }
 
