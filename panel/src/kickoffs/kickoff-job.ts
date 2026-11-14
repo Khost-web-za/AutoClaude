@@ -34,7 +34,13 @@ export async function runKickoffJob(deps: KickoffJobDeps, now: Date): Promise<vo
     const timeZone = await deps.timeZone();
     let started: StartedWindow | null = null;
     for (const row of due) {
-      started = await handleKickoff(deps, row, now, timeZone, started);
+      try {
+        started = await handleKickoff(deps, row, now, timeZone, started);
+      } catch (error) {
+        // Finish it now: left `running`, it would later be failed as "Interrupted", which is not what happened.
+        console.error('[schedule] a kick-off failed:', error instanceof Error ? error.name : 'error');
+        await finishKickoff(deps.db, row.id, { status: 'failed', outcome: 'Failed: internal error' }).catch(() => undefined);
+      }
     }
   } finally {
     deps.publish({ kind: 'kickoffs' });

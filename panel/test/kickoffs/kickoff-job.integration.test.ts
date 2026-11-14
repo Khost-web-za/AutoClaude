@@ -150,6 +150,21 @@ describe('kick-off job', () => {
       expect(deps.publish).toHaveBeenCalledWith({ kind: 'kickoffs' });
     }));
 
+  it('an error on one kick-off fails only that one; the other claimed ones still run', () =>
+    withTestDb(async ({ db }) => {
+      await seed(db, '2026-11-14T09:58:00Z', '2026-11-14T09:59:00Z');
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const deps = setup(db, {
+        runContainer: vi.fn().mockRejectedValueOnce(new Error('connection reset')).mockResolvedValue({ ok: true }),
+      });
+      await runKickoffJob(deps, NOW);
+      log.mockRestore();
+      const [first, second] = await rows(db);
+      expect(first).toMatchObject({ status: 'failed', outcome: 'Failed: internal error' });
+      expect(second).toMatchObject({ status: 'started' });
+      expect(deps.publish).toHaveBeenCalledWith({ kind: 'kickoffs' });
+    }));
+
   it('publishes nothing when there is nothing to do', () =>
     withTestDb(async ({ db }) => {
       const deps = setup(db);
