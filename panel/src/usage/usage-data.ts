@@ -13,7 +13,9 @@ export type UsageViewSettings = {
 /** What the header needs, serialisable across the server/client boundary. */
 export type UsageViewData = {
   snapshot: UsageSnapshot | null;
-  /** Why there is no snapshot; null when there is one. */
+  /** The snapshot is the last good reading, kept after a failed refresh. */
+  stale: boolean;
+  /** Why the latest fetch failed (or there is no snapshot); null when it succeeded. */
   reason: UsageFailureReason | null;
   settings: UsageViewSettings;
   /** Server time the data was read, so the client's first render matches the HTML. */
@@ -41,8 +43,9 @@ async function readViewSettings(): Promise<UsageViewSettings> {
 export async function loadUsageView(): Promise<UsageViewData> {
   const [result, viewSettings] = await Promise.all([getUsageResult(), readViewSettings()]);
   return {
-    snapshot: result.ok ? result.snapshot : null,
-    reason: result.ok ? null : result.reason,
+    snapshot: result.snapshot,
+    stale: result.stale,
+    reason: result.reason,
     settings: viewSettings,
     renderedAt: new Date(),
   };

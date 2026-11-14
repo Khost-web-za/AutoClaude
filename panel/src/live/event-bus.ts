@@ -1,11 +1,12 @@
 import type { SessionStatus } from '@/db/schema';
 import type { HostStats } from '@/host/host-stats-types';
+import type { UsageFailureReason } from '@/usage/usage-client';
 import type { UsageSnapshot } from '@/usage/usage-types';
 
 export type LiveEvent =
   | { kind: 'session'; sessionId: string; status: SessionStatus; detail?: string; remoteControlUrl?: string }
   | { kind: 'session_event'; sessionId: string; type: string; at: string }
-  | { kind: 'usage'; usage: UsageSnapshot | null }
+  | { kind: 'usage'; usage: UsageSnapshot | null; stale: boolean; reason: UsageFailureReason | null }
   | { kind: 'host'; stats: HostStats | null };
 
 export type LiveListener = (event: LiveEvent) => void;

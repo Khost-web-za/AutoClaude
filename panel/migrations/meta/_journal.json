@@ -29,6 +29,13 @@
       "when": 1794616482658,
       "tag": "0003_rainy_sharon_carter",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794661041743,
+      "tag": "0004_abandoned_tarantula",
+      "breakpoints": true
     }
   ]
 }

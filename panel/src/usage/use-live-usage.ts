@@ -13,7 +13,7 @@ type WireSnapshot = {
   fetchedAt: string;
 };
 
-type LiveUsage = Pick<UsageViewData, 'snapshot' | 'reason' | 'renderedAt'>;
+type LiveUsage = Pick<UsageViewData, 'snapshot' | 'stale' | 'reason' | 'renderedAt'>;
 
 const reviveWindow = (window: WireWindow): UsageWindow => ({
   pct: window.pct,
@@ -44,7 +44,7 @@ export function useLiveUsage(initial: UsageViewData): UsageViewData {
     const snapshot = reviveSnapshot(event.usage);
     setState((current) => ({
       ...current,
-      live: { snapshot, reason: snapshot ? null : 'unavailable', renderedAt: new Date() },
+      live: { snapshot, stale: event.stale, reason: event.reason, renderedAt: new Date() },
     }));
   });
 

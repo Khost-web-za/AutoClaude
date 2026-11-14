@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import type { Db } from '@/db/client';
 import { paginate } from '@/db/pagination';
-import { sessionEvents, sessionProfiles, sessions, settings } from '@/db/schema';
+import { sessionEvents, sessionProfiles, sessions, settings, usageCache } from '@/db/schema';
 import { withTestDb } from '@/db/testing';
 
 const baseSession = {
@@ -47,6 +47,20 @@ describe('database schema', () => {
           usageDangerPct: 2,
           timeZone: 'UTC',
         })
+        .then(
+          () => null,
+          (e: { cause?: { code?: string } }) => e,
+        );
+      expect(error?.cause?.code).toBe('23514');
+    }));
+
+  it('keeps a single usage_cache row', () =>
+    withTestDb(async ({ db }) => {
+      const values = { snapshot: { fiveHour: { pct: 1, resetsAt: null } }, fetchedAt: new Date() };
+      await db.insert(usageCache).values(values);
+      const error = await db
+        .insert(usageCache)
+        .values({ ...values, id: 2 })
         .then(
           () => null,
           (e: { cause?: { code?: string } }) => e,
