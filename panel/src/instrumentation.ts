@@ -23,6 +23,13 @@ export async function register() {
   }
 
   try {
+    const { startSchedulerLoop } = await import('@/scheduler/scheduler-loop');
+    startSchedulerLoop();
+  } catch (error) {
+    console.warn('[scheduler] loop failed to start:', error instanceof Error ? error.name : 'error');
+  }
+
+  try {
     const { removeStaleLoginHelpers } = await import('@/claude/login-helper');
     await removeStaleLoginHelpers();
   } catch (error) {
