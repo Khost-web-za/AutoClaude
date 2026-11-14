@@ -45,6 +45,8 @@ export function nextStatus(current: SessionStatus, event: RunnerEvent): StatusCh
         default:
           return null;
       }
+    case 'workspace_sync':
+      return null;
     case 'claude_exited':
       return data.fatal === true && data.restarting !== true ? { status: 'failed' } : null;
   }
