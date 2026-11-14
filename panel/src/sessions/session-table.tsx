@@ -2,6 +2,7 @@
 
 import { Table } from '@heroui/react';
 import Link from 'next/link';
+import { LimitBadge } from '@/auto-resume/limit-badge';
 import { StatusDot } from '@/ui/status-dot';
 import { formatAge } from '@/time/relative-time';
 import { dotStatus, openableRemoteUrl } from './display-status';
@@ -13,7 +14,7 @@ import { WorkStateLabel } from './work-state-label';
 const HEAD = 'font-mono text-[11px] font-medium tracking-[0.12em] text-text-subtle uppercase';
 
 /** Desktop (lg+) session list: repo + task, branch, status, work, age, Open in Claude. */
-export function SessionTable({ rows, now }: { rows: readonly SessionListRow[]; now: Date }) {
+export function SessionTable({ rows, now, timeZone }: { rows: readonly SessionListRow[]; now: Date; timeZone: string }) {
   return (
     <Table variant="secondary">
       <Table.ScrollContainer>
@@ -46,7 +47,10 @@ export function SessionTable({ rows, now }: { rows: readonly SessionListRow[]; n
                   <code className="font-mono text-xs text-accent-text/85">{row.workBranch}</code>
                 </Table.Cell>
                 <Table.Cell>
-                  <StatusDot status={dotStatus(row.status)} showLabel />
+                  <div className="flex flex-col items-start gap-1.5">
+                    <StatusDot status={dotStatus(row.status)} showLabel />
+                    <LimitBadge state={row.limitState} resumeAt={row.limitResetsAt} detail={row.limitDetail} timeZone={timeZone} />
+                  </div>
                 </Table.Cell>
                 <Table.Cell>
                   <WorkStateLabel gitState={row.gitState} />

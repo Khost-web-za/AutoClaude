@@ -1,13 +1,14 @@
 'use client';
 
 import { createContext, use, useOptimistic, useTransition, type ReactNode } from 'react';
-import type { SessionStatus } from '@/db/schema';
+import { resumeNowAction } from '@/auto-resume/resume-actions';
+import type { LimitState, SessionStatus } from '@/db/schema';
 import { notifyError, notifySuccess, UNREACHABLE_MESSAGE } from '@/feedback/toast-host';
 import { openableRemoteUrl } from './display-status';
 import { clearSessionAction, restartSessionAction, stopSessionAction } from './session-actions';
-import { useLiveSessionPatches } from './use-live-sessions';
+import { useLiveLimitPatches, useLiveSessionPatches } from './use-live-sessions';
 
-export type SessionCommand = 'stop' | 'restart' | 'clear' | 'delete';
+export type SessionCommand = 'stop' | 'restart' | 'clear' | 'resume' | 'delete';
 
 export type SessionSnapshot = {
   id: string;
@@ -16,6 +17,12 @@ export type SessionSnapshot = {
   statusDetail: string | null;
   remoteControlUrl: string | null;
   hasContainer: boolean;
+  autoResume: boolean;
+  limitState: LimitState;
+  limitResetsAt: Date | null;
+  limitDetail: string | null;
+  /** The settings time zone, for the limit badge's resume time. */
+  timeZone: string;
 };
 
 type SessionLive = SessionSnapshot & {
@@ -28,10 +35,10 @@ type SessionLive = SessionSnapshot & {
 
 const Context = createContext<SessionLive | null>(null);
 
-/** Clear has none: the status stays until Claude's own hooks report it. */
+/** Clear and Resume now have none: the status stays until Claude's own hooks report it. */
 const OPTIMISTIC: Partial<Record<SessionCommand, SessionStatus>> = { stop: 'stopped', restart: 'starting', delete: 'stopped' };
 
-const ACTIONS = { stop: stopSessionAction, restart: restartSessionAction, clear: clearSessionAction } as const;
+const ACTIONS = { stop: stopSessionAction, restart: restartSessionAction, clear: clearSessionAction, resume: resumeNowAction } as const;
 
 /**
  * One session's status for its header, controls and mobile action bar: server-rendered, patched by
@@ -41,7 +48,9 @@ const ACTIONS = { stop: stopSessionAction, restart: restartSessionAction, clear:
 export function SessionLiveProvider({ session, children }: { session: SessionSnapshot; children: ReactNode }) {
   // Keyed by value: a refresh that brings the same server state keeps a newer live patch.
   const patches = useLiveSessionPatches(`${session.status}|${session.statusDetail}|${session.remoteControlUrl}`);
+  const limitPatches = useLiveLimitPatches(`${session.limitState}|${session.limitResetsAt?.getTime()}|${session.limitDetail}`);
   const patch = patches.get(session.id);
+  const limitPatch = limitPatches.get(session.id);
   const liveStatus = patch?.status ?? session.status;
   const [status, setOptimisticStatus] = useOptimistic(liveStatus);
   const [pendingCommand, setPendingCommand] = useOptimistic<SessionCommand | null>(null);
@@ -74,6 +83,9 @@ export function SessionLiveProvider({ session, children }: { session: SessionSna
     status,
     statusDetail: patch ? patch.detail : session.statusDetail,
     remoteControlUrl,
+    limitState: limitPatch?.limitState ?? session.limitState,
+    limitResetsAt: limitPatch ? limitPatch.resumeAt : session.limitResetsAt,
+    limitDetail: limitPatch ? limitPatch.detail : session.limitDetail,
     pending: pendingCommand,
     run,
     track,

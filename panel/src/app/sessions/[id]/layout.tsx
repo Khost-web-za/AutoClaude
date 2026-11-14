@@ -4,7 +4,8 @@ import { SessionActionBar } from '@/sessions/session-controls';
 import { SessionDetailTabs } from '@/sessions/session-detail-tabs';
 import { SessionLiveProvider } from '@/sessions/session-live-context';
 import { loadSessionForPage, type SessionRouteParams } from '@/sessions/session-page';
-import { LiveOpenInClaude, SessionStatusBadge, SessionStatusDetail } from '@/sessions/session-status-badge';
+import { LiveOpenInClaude, SessionLimitBadge, SessionStatusBadge, SessionStatusDetail } from '@/sessions/session-status-badge';
+import { getSettings } from '@/settings/settings-store';
 import { formatAgo } from '@/time/relative-time';
 import { PageHeader } from '@/ui/page-header';
 
@@ -15,7 +16,7 @@ export async function generateMetadata({ params }: SessionRouteParams): Promise<
 
 /** Header (repo, live status, branch off base, age, Open in Claude), tabs, and the mobile action bar. */
 export default async function SessionLayout({ children, params }: SessionRouteParams & { children: ReactNode }) {
-  const session = await loadSessionForPage(params);
+  const [session, settings] = await Promise.all([loadSessionForPage(params), getSettings()]);
   const changes = session.gitState && !session.gitState.error
     ? session.gitState.unpushedCommits + session.gitState.uncommittedFiles
     : null;
@@ -28,11 +29,21 @@ export default async function SessionLayout({ children, params }: SessionRoutePa
         statusDetail: session.statusDetail,
         remoteControlUrl: session.remoteControlUrl,
         hasContainer: session.containerId !== null,
+        autoResume: session.autoResume,
+        limitState: session.limitState,
+        limitResetsAt: session.limitResetsAt,
+        limitDetail: session.limitDetail,
+        timeZone: settings.timeZone,
       }}
     >
       <PageHeader
         title={session.repoFullName}
-        badge={<SessionStatusBadge />}
+        badge={
+          <>
+            <SessionStatusBadge />
+            <SessionLimitBadge />
+          </>
+        }
         back={{ href: '/', label: 'Sessions' }}
         description={
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
