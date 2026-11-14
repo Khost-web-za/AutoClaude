@@ -209,3 +209,107 @@ test("restarted container resumes without re-cloning or re-sending the task", { 
   assert.ok(argv.includes("--continue"));
   assert.ok(!argv.includes("first task"));
 });
+
+// The same script the panel runs as user 1000 via execInRepo (panel/src/auto-resume/session-keys.ts).
+const RELAUNCH_SCRIPT =
+  'printf %s "$1" | base64 -d > "$HOME/.runner/resume-message" && touch "$HOME/.runner/panel-relaunch" && { tmux kill-session -t claude 2>/dev/null || true; }';
+const requestRelaunch = (name, message) =>
+  docker("exec", "-u", "claude", name, "sh", "-c", RELAUNCH_SCRIPT, "sh", Buffer.from(message, "utf8").toString("base64"));
+const readArgv = (name) =>
+  execFileSync("docker", ["exec", "-u", "claude", name, "cat", "/tmp/stub-argv"]).toString("utf8").split("\0").slice(0, -1);
+const hasTmuxSession = (name) => spawnSync("docker", ["exec", "-u", "claude", name, "tmux", "has-session", "-t", "claude"]).status === 0;
+
+test("a requested relaunch does not count toward the fatal limit", { skip: !enabled }, async () => {
+  const { name, panel } = await startSession();
+  const exits = () => panel.events.filter((e) => e.type === "claude_exited");
+  await waitFor(() => panel.events.some((e) => e.type === "remote_control_url"), 60_000, "first url");
+  for (let i = 1; i <= 5; i++) {
+    await waitFor(() => hasTmuxSession(name), 30_000, `session before relaunch ${i}`);
+    requestRelaunch(name, `resume ${i}`);
+    await waitFor(() => exits().length >= i, 30_000, `claude_exited ${i}`);
+  }
+  await waitFor(() => hasTmuxSession(name), 30_000, "session after 5 relaunches");
+  assert.deepEqual(
+    exits().map((e) => [e.data.restarting, e.data.fatal, e.data.requested]),
+    Array(5).fill([true, false, true]),
+  );
+  assert.deepEqual(readArgv(name).slice(0, 1), ["--continue"]);
+});
+
+test("resume passes the message once", { skip: !enabled }, async () => {
+  const { name, panel } = await startSession();
+  await waitFor(() => panel.events.some((e) => e.type === "remote_control_url"), 60_000, "first url");
+  await waitFor(() => hasTmuxSession(name), 30_000, "session");
+  requestRelaunch(name, "keep going");
+  await waitFor(() => panel.events.some((e) => e.type === "claude_exited"), 30_000, "claude_exited");
+  await waitFor(() => hasTmuxSession(name) && readArgv(name).includes("keep going"), 30_000, "relaunch with message");
+  assert.ok(readArgv(name).includes("--continue"));
+  // A later plain relaunch (marker only, no new message) must not replay it.
+  docker("exec", "-u", "claude", name, "sh", "-c", 'touch "$HOME/.runner/panel-relaunch"; tmux kill-session -t claude');
+  await waitFor(() => panel.events.filter((e) => e.type === "claude_exited").length >= 2, 30_000, "second claude_exited");
+  await waitFor(() => hasTmuxSession(name) && !readArgv(name).includes("keep going"), 30_000, "relaunch without message");
+  assert.ok(readArgv(name).includes("--continue"));
+});
+
+test("resume message with quotes and newlines arrives intact", { skip: !enabled }, async () => {
+  const message = 'Continue "now" $HOME `id` \n\nline2\n\n \'q\' 🚀 && rm -rf /\n';
+  const { name, panel } = await startSession();
+  await waitFor(() => panel.events.some((e) => e.type === "remote_control_url"), 60_000, "first url");
+  await waitFor(() => hasTmuxSession(name), 30_000, "session");
+  requestRelaunch(name, message);
+  await waitFor(() => hasTmuxSession(name) && readArgv(name).includes(message), 30_000, "relaunch with exact message");
+});
+
+// Ends Claude on its own (the stub is `exec sleep infinity`) without touching tmux.
+const killClaude = (name) => docker("exec", "-u", "claude", name, "pkill", "-x", "sleep");
+const sh = (name, script) => docker("exec", "-u", "claude", name, "sh", "-c", script);
+const exitedCount = (panel) => panel.events.filter((e) => e.type === "claude_exited").length;
+const WRITE_MESSAGE = 'printf %s "$1" | base64 -d > "$HOME/.runner/resume-message"';
+
+async function bootedSession(env = {}) {
+  const session = await startSession({ SUPERVISE_BACKOFF_SCALE: "0.01", ...env });
+  await waitFor(() => session.panel.events.some((e) => e.type === "remote_control_url"), 60_000, "first url");
+  await waitFor(() => hasTmuxSession(session.name), 30_000, "session");
+  return session;
+}
+
+test("a marker that arrives after Claude already exited still relaunches with the message", { skip: !enabled }, async () => {
+  const { name, panel } = await bootedSession();
+  // Panel script ran (message + marker) and Claude ended on its own before tmux was killed.
+  sh(name, `printf %s "late message" > "$HOME/.runner/resume-message"; touch "$HOME/.runner/panel-relaunch"`);
+  killClaude(name);
+  await waitFor(() => exitedCount(panel) >= 1, 30_000, "claude_exited");
+  assert.equal(panel.events.find((e) => e.type === "claude_exited").data.requested, true);
+  await waitFor(() => hasTmuxSession(name) && readArgv(name).includes("late message"), 30_000, "relaunch with message");
+});
+
+test("a stale marker does not make a natural exit look requested", { skip: !enabled }, async () => {
+  const { name, panel } = await bootedSession();
+  sh(name, 'touch -d "1 hour ago" "$HOME/.runner/panel-relaunch"');
+  killClaude(name);
+  await waitFor(() => exitedCount(panel) >= 1, 30_000, "claude_exited");
+  const event = panel.events.find((e) => e.type === "claude_exited");
+  assert.equal(event.data.requested, undefined);
+  assert.equal(event.data.restarting, true);
+  await waitFor(() => hasTmuxSession(name), 30_000, "relaunch");
+  assert.equal(spawnSync("docker", ["exec", name, "test", "-e", "/home/claude/.runner/panel-relaunch"]).status, 1);
+});
+
+test("a natural exit between the message and the marker does not lose the message", { skip: !enabled }, async () => {
+  const { name, panel } = await bootedSession();
+  docker("exec", "-u", "claude", name, "sh", "-c", WRITE_MESSAGE, "sh", Buffer.from("do not lose me", "utf8").toString("base64"));
+  killClaude(name);
+  await waitFor(() => exitedCount(panel) >= 1, 30_000, "natural claude_exited");
+  await waitFor(() => hasTmuxSession(name), 30_000, "natural relaunch");
+  assert.ok(!readArgv(name).includes("do not lose me"));
+  sh(name, 'touch "$HOME/.runner/panel-relaunch"; { tmux kill-session -t claude 2>/dev/null || true; }');
+  await waitFor(() => hasTmuxSession(name) && readArgv(name).includes("do not lose me"), 30_000, "requested relaunch with message");
+});
+
+test("a resume message starting with a dash arrives intact", { skip: !enabled }, async () => {
+  const { name } = await bootedSession();
+  requestRelaunch(name, "-p --version");
+  await waitFor(() => hasTmuxSession(name) && readArgv(name).includes("-p --version"), 30_000, "relaunch with message");
+  const argv = readArgv(name);
+  assert.deepEqual(argv.slice(-2), ["--", "-p --version"]);
+});

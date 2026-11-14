@@ -19,6 +19,7 @@ export const newSessionRequestSchema = z.object({
     .max(STARTING_TASK_MAX, `At most ${STARTING_TASK_MAX.toLocaleString('en-US')} characters`)
     .nullish(),
   deliveryMode: z.enum(['pull_request', 'push']).optional(),
+  autoResume: z.boolean().optional(),
 });
 
 export type NewSessionRequest = z.input<typeof newSessionRequestSchema>;
@@ -31,8 +32,8 @@ type ValidationDeps = {
   profiles: readonly Profile[];
   /** `assertRepoAccessible`: canonical `Owner/Name`, or RepoNotAccessibleError. */
   resolveRepo: (fullName: string) => Promise<{ fullName: string }>;
-  /** The repository's default delivery mode, used when the request does not pick one. */
-  readDeliveryMode: (repoFullName: string) => Promise<DeliveryMode>;
+  /** The repository's default delivery mode and auto-resume, used when the request does not pick one. */
+  readRepoDefaults: (repoFullName: string) => Promise<{ deliveryMode: DeliveryMode; autoResume: boolean }>;
 };
 
 /**
@@ -63,7 +64,10 @@ export async function validateNewSession(raw: unknown, deps: ValidationDeps): Pr
     throw error;
   }
 
-  const deliveryMode = request.deliveryMode ?? (await deps.readDeliveryMode(fullName));
+  const defaults =
+    request.deliveryMode === undefined || request.autoResume === undefined ? await deps.readRepoDefaults(fullName) : null;
+  const deliveryMode = request.deliveryMode ?? defaults?.deliveryMode ?? 'pull_request';
+  const autoResume = request.autoResume ?? defaults?.autoResume ?? false;
   const task = request.startingTask ?? '';
   return {
     ok: true,
@@ -73,6 +77,7 @@ export async function validateNewSession(raw: unknown, deps: ValidationDeps): Pr
       profiles: [...new Set(request.profiles)],
       startingTask: task.trim() ? task : null,
       deliveryMode,
+      autoResume,
     },
   };
 }

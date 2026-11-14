@@ -1,0 +1,19 @@
+# synthetic: written from Claude Code's on-screen strings, not captured from a live session
+
+> tighten the limit detection
+
+⏺ I'll update the usage limit detection so prose never counts. Today any
+  line saying usage limit reached marks the session, even this one, and it
+  resets 3pm-style times are parsed from anywhere.
+
+  5-hour limit reached ∙ resets 3pm is the notice we actually want to match.
+
+⏺ Update(src/auto-resume/limit-screen.ts)
+  ⎿  Updated src/auto-resume/limit-screen.ts with 4 additions
+
+⏺ Done. Rate limit reached and usage limit mentions are now ignored.
+
+────────────────────────────────────────────────────────────────────────
+> 
+────────────────────────────────────────────────────────────────────────
+  ? for shortcuts

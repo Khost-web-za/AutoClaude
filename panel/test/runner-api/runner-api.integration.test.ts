@@ -190,4 +190,62 @@ describe('runner api', () => {
       expect(seen.some((e) => e.kind === 'session' && e.sessionId === id)).toBe(false);
       expect(seen.some((e) => e.kind === 'session_event' && e.sessionId === id)).toBe(true);
     }));
+  const limited = {
+    autoResume: true,
+    limitState: 'resuming' as const,
+    limitResetsAt: new Date('2026-11-14T15:00:00Z'),
+    resumeAttempts: 2,
+    resumeNextAt: new Date('2026-11-14T15:16:00Z'),
+    limitDetail: 'Waiting: Claude is asking something',
+  };
+
+  it('user prompt clears limited state', () =>
+    setup(async ({ db, id, call }) => {
+      await db.update(sessions).set({ ...limited, status: 'idle' }).where(eq(sessions.id, id));
+      const seen: LiveEvent[] = [];
+      const off = eventBus.subscribe((e) => seen.push(e));
+      const res = await call('/api/runner/events', { body: event('hook', { event: 'UserPromptSubmit' }) });
+      off();
+      expect(res.status).toBe(204);
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, id));
+      expect(row).toMatchObject({
+        status: 'working',
+        limitState: 'none',
+        resumeAttempts: 0,
+        limitResetsAt: null,
+        resumeNextAt: null,
+        limitDetail: null,
+      });
+      expect(seen).toContainEqual({ kind: 'session_limit', sessionId: id, limitState: 'none', resumeAt: null, detail: null });
+    }));
+
+  it('a prompt clears a failed resume (the user carried on by hand)', () =>
+    setup(async ({ db, id, call }) => {
+      await db.update(sessions).set({ limitState: 'failed', limitDetail: 'Resume failed: no response after relaunch' }).where(eq(sessions.id, id));
+      await call('/api/runner/events', { body: event('hook', { event: 'UserPromptSubmit' }) });
+      const [row] = await db.select().from(sessions).where(eq(sessions.id, id));
+      expect(row).toMatchObject({ limitState: 'none', limitDetail: null });
+    }));
+
+  it('fatal exit fails a resuming session', () =>
+    setup(async ({ db, id, call }) => {
+      await db.update(sessions).set({ ...limited, status: 'idle' }).where(eq(sessions.id, id));
+      const seen: LiveEvent[] = [];
+      const off = eventBus.subscribe((e) => seen.push(e));
+      await call('/api/runner/events', { body: event('claude_exited', { code: 1, restarting: true, fatal: false }) });
+      let [row] = await db.select().from(sessions).where(eq(sessions.id, id));
+      expect(row?.limitState).toBe('resuming');
+      const res = await call('/api/runner/events', { body: event('claude_exited', { code: 1, restarting: false, fatal: true }) });
+      off();
+      expect(res.status).toBe(204);
+      [row] = await db.select().from(sessions).where(eq(sessions.id, id));
+      expect(row).toMatchObject({ status: 'failed', limitState: 'failed', limitDetail: 'Resume failed: Claude crashed', resumeNextAt: null });
+      expect(seen).toContainEqual({
+        kind: 'session_limit',
+        sessionId: id,
+        limitState: 'failed',
+        resumeAt: null,
+        detail: 'Resume failed: Claude crashed',
+      });
+    }));
 });

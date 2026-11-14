@@ -1,18 +1,23 @@
 import { readCredentials as sharedReadCredentials, type ClaudeCredentials } from '@/claude/credentials-volume';
 import { eventBus, type LiveEvent } from '@/live/event-bus';
+import { loadLastUsage, saveLastUsage } from './usage-cache-store';
 import type { UsageSnapshot, UsageWindow } from './usage-types';
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 const CACHE_MS = 60_000;
+const RATE_LIMITED_CACHE_MS = 300_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
 export type UsageFailureReason = 'no-credentials' | 'expired' | `http-${number}` | 'unavailable';
-export type UsageResult = { ok: true; snapshot: UsageSnapshot } | { ok: false; reason: UsageFailureReason };
+/** `stale` is true when the snapshot came from the last good reading after a failure. */
+export type UsageResult = { snapshot: UsageSnapshot | null; stale: boolean; reason: UsageFailureReason | null };
 
 export type UsageClientDeps = {
   fetch: typeof fetch;
   now: () => number;
   readCredentials: () => Promise<ClaudeCredentials | null>;
+  loadLast: () => Promise<UsageSnapshot | null>;
+  saveLast: (snapshot: UsageSnapshot) => Promise<void>;
   publish: (event: LiveEvent) => void;
   warn: (message: string) => void;
 };
@@ -62,16 +67,29 @@ export function parseUsage(body: unknown, fetchedAt: Date): UsageSnapshot | null
 }
 
 export function createUsageClient(deps: UsageClientDeps) {
-  let cached: { at: number; result: UsageResult } | null = null;
+  let cached: { at: number; ttl: number; result: UsageResult } | null = null;
   let inFlight: Promise<UsageResult> | null = null;
+  let lastGood: UsageSnapshot | null = null;
+  let seeded = false;
   const loggedReasons = new Set<string>();
 
-  function fail(reason: UsageFailureReason): UsageResult {
+  async function seedLastGood(): Promise<void> {
+    if (seeded) return;
+    seeded = true;
+    try {
+      lastGood ??= await deps.loadLast();
+    } catch {
+      // nothing persisted is readable; start without a fallback
+    }
+  }
+
+  async function fail(reason: UsageFailureReason): Promise<UsageResult> {
     if (!loggedReasons.has(reason)) {
       loggedReasons.add(reason);
       deps.warn(`[usage] unavailable: ${reason}`);
     }
-    return { ok: false, reason };
+    await seedLastGood();
+    return { snapshot: lastGood, stale: lastGood !== null, reason };
   }
 
   async function load(): Promise<UsageResult> {
@@ -95,31 +113,47 @@ export function createUsageClient(deps: UsageClientDeps) {
       const snapshot = parseUsage(await response.json(), new Date(deps.now()));
       if (!snapshot) return fail('unavailable');
       loggedReasons.clear();
-      return { ok: true, snapshot };
+      lastGood = snapshot;
+      seeded = true;
+      try {
+        await deps.saveLast(snapshot);
+      } catch {
+        // persistence is best effort; the in-memory copy still serves
+      }
+      return { snapshot, stale: false, reason: null };
     } catch {
       return fail('unavailable');
     }
   }
 
+  /** A failure is cached as long as a success, and five times longer after a 429. */
+  function ttlFor(result: UsageResult): number {
+    return result.reason === 'http-429' ? RATE_LIMITED_CACHE_MS : CACHE_MS;
+  }
+
+  async function fetchAndPublish(): Promise<UsageResult> {
+    const result = await load();
+    cached = { at: deps.now(), ttl: ttlFor(result), result };
+    deps.publish({ kind: 'usage', usage: result.snapshot, stale: result.stale, reason: result.reason });
+    return result;
+  }
+
   async function getUsageResult(): Promise<UsageResult> {
-    if (cached && deps.now() - cached.at < CACHE_MS) return cached.result;
-    inFlight ??= load()
-      .then((result) => {
-        cached = { at: deps.now(), result };
-        deps.publish({ kind: 'usage', usage: result.ok ? result.snapshot : null });
-        return result;
-      })
-      .finally(() => {
-        inFlight = null;
-      });
+    if (cached && deps.now() - cached.at < cached.ttl) return cached.result;
+    inFlight ??= fetchAndPublish().finally(() => {
+      inFlight = null;
+    });
     return inFlight;
   }
 
   return {
     getUsageResult,
+    /** Bypasses the cache; used right after a kick-off so the header shows the new window. */
+    async refresh(): Promise<UsageResult> {
+      return fetchAndPublish();
+    },
     async getUsage(): Promise<UsageSnapshot | null> {
-      const result = await getUsageResult();
-      return result.ok ? result.snapshot : null;
+      return (await getUsageResult()).snapshot;
     },
   };
 }
@@ -134,6 +168,8 @@ function sharedUsageClient(): UsageClient {
     fetch: (input, init) => fetch(input, init),
     now: Date.now,
     readCredentials: sharedReadCredentials,
+    loadLast: loadLastUsage,
+    saveLast: saveLastUsage,
     publish: (event) => eventBus.publish(event),
     warn: (message) => console.warn(message),
   }));
@@ -141,3 +177,4 @@ function sharedUsageClient(): UsageClient {
 
 export const getUsage = () => sharedUsageClient().getUsage();
 export const getUsageResult = () => sharedUsageClient().getUsageResult();
+export const refreshUsage = () => sharedUsageClient().refresh();

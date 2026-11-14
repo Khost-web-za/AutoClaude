@@ -1,7 +1,7 @@
 import { and, desc, ilike, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import { db as sharedDb, type Db } from '@/db/client';
 import { paginate, type PageResult } from '@/db/pagination';
-import { sessions, type SessionGitState, type SessionStatus } from '@/db/schema';
+import { sessions, type LimitState, type SessionGitState, type SessionStatus } from '@/db/schema';
 import { SESSION_TABS, type SessionTabCounts, type SessionTabKey } from './session-tabs';
 
 export const SESSION_QUERY_MAX = 100;
@@ -14,6 +14,10 @@ export type SessionListRow = {
   status: SessionStatus;
   gitState: SessionGitState | null;
   remoteControlUrl: string | null;
+  limitState: LimitState;
+  /** When the next resume step runs ("resumes 03:01"). */
+  resumeAt: Date | null;
+  limitDetail: string | null;
   createdAt: Date;
 };
 
@@ -53,6 +57,9 @@ export function listSessions(
           status: sessions.status,
           gitState: sessions.gitState,
           remoteControlUrl: sessions.remoteControlUrl,
+          limitState: sessions.limitState,
+          resumeAt: sessions.resumeNextAt,
+          limitDetail: sessions.limitDetail,
           createdAt: sessions.createdAt,
         })
         .from(sessions)

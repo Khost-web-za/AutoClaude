@@ -12,6 +12,7 @@ import { ProfileCards } from '@/profiles/profile-cards';
 import { Banner } from '@/ui/banner';
 import type { PagedOption } from '@/ui/paged-combo-box';
 import { SectionLabel } from '@/ui/section-label';
+import { AutoResumeField } from './auto-resume-field';
 import { BranchPicker } from './branch-picker';
 import { DeliveryModeField } from './delivery-mode-field';
 import { STARTING_TASK_MAX } from './new-session-limits';
@@ -19,7 +20,7 @@ import { repoDefaultsAction } from './new-session-actions';
 import { RepoPicker } from './repo-picker';
 import { startSessionAction } from './session-actions';
 
-export type NewSessionPreset = { repo: string; baseBranch: string; profiles: string[]; deliveryMode: DeliveryMode } | null;
+export type NewSessionPreset = { repo: string; baseBranch: string; profiles: string[]; deliveryMode: DeliveryMode; autoResume: boolean } | null;
 
 function clashText(profiles: readonly Profile[], picked: string[]): string[] {
   try {
@@ -32,8 +33,8 @@ function clashText(profiles: readonly Profile[], picked: string[]): string[] {
 }
 
 /**
- * Repository, base branch, delivery mode, profiles and an optional starting task. Picking a repository fills in its
- * remembered base branch, delivery mode and profiles. Everything is validated again on the server; a refusal (no free
+ * Repository, base branch, delivery mode, auto-resume, profiles and an optional starting task. Picking a repository fills in its
+ * remembered base branch, delivery mode, auto-resume and profiles. Everything is validated again on the server; a refusal (no free
  * slot, low disk, no Sysbox) is toasted and the form keeps what was entered.
  */
 export function NewSessionForm({
@@ -50,6 +51,7 @@ export function NewSessionForm({
   const [branch, setBranch] = useState<string | null>(preset?.baseBranch ?? null);
   const [picked, setPicked] = useState<string[]>(preset?.profiles ?? []);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>(preset?.deliveryMode ?? 'pull_request');
+  const [autoResume, setAutoResume] = useState(preset?.autoResume ?? false);
   const [task, setTask] = useState('');
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [isPending, startTransition] = useTransition();
@@ -73,6 +75,7 @@ export function NewSessionForm({
       }
       setBranch(defaults.baseBranch);
       setDeliveryMode(defaults.deliveryMode);
+      setAutoResume(defaults.autoResume);
       setPicked(defaults.profiles.filter((name) => profiles.some((profile) => profile.name === name)));
     } catch {
       if (ticket === defaultsRequest.current) notifyError(UNREACHABLE_MESSAGE);
@@ -88,6 +91,7 @@ export function NewSessionForm({
           baseBranch: branch ?? '',
           profiles: picked,
           deliveryMode,
+          autoResume,
           startingTask: task,
         });
         if (result.ok) {
@@ -116,6 +120,7 @@ export function NewSessionForm({
       <section className="flex flex-col gap-4">
         <SectionLabel>Session delivery</SectionLabel>
         <DeliveryModeField value={deliveryMode} onChange={setDeliveryMode} errorMessage={error('deliveryMode')} />
+        <AutoResumeField isSelected={autoResume} onChange={setAutoResume} />
       </section>
 
       <section className="flex flex-col gap-4">

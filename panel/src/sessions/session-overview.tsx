@@ -6,7 +6,7 @@ import { BASE_PROFILE } from '@/profiles/profile-names';
 import { SectionLabel } from '@/ui/section-label';
 import { ResourceMeters, ResourceMetersSkeleton } from './resource-meters';
 import { holdsRunningSlot } from './running-statuses';
-import { SessionControls } from './session-controls';
+import { SessionAutoResumeSwitch, SessionControls } from './session-controls';
 import type { SessionEventRow, SessionView } from './session-detail';
 import { SessionEventList } from './session-event-list';
 import { WorkStateFacts } from './work-state-facts';
@@ -60,6 +60,10 @@ export function SessionOverview({
           <Suspense fallback={<ResourceMetersSkeleton />}>
             <ResourceMeters containerId={session.containerId} running={running} />
           </Suspense>
+        </section>
+        <section className="flex flex-col gap-4">
+          <SectionLabel>Auto-resume</SectionLabel>
+          <SessionAutoResumeSwitch />
         </section>
         <section className="flex flex-col gap-4">
           <SectionLabel>Config profiles</SectionLabel>

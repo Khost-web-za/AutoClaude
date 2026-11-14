@@ -103,7 +103,24 @@ Open the Sessions page. Until Claude and GitHub are connected it shows a setup c
 
 Keep `base` mostly as it is, because that is the only place upstream updates can conflict with your changes. Put your personal rules in a profile of your own and tick it in every session.
 
-## 10. Updating and redeploying
+## 10. Schedule and auto-resume
+
+**Kick-offs.** A kick-off starts your 5-hour usage window at a time you choose, so it resets when you want it to. Add one on the Schedule page, in the time zone set in Settings. At that time the panel runs Claude Code once with Haiku in a short-lived container, sending a single "." prompt. If a window is already running, the kick-off is skipped. If the panel was down for more than 30 minutes past the chosen time, it is marked missed and does not run late.
+
+**Auto-resume.** When a session hits its usage limit, auto-resume can continue it for you. It is off by default. Turn it on as a default per repository, or with the switch on a single session. The repository also holds the resume message. After the limit resets, the panel:
+
+- types the resume message at reset + 1 minute, and tries again at +6 and +16 minutes;
+- relaunches Claude with `--continue` at +18 minutes at the earliest (held while Claude shows a question);
+- gives up at +21 minutes.
+
+Before each step it checks again. If Claude's screen shows a later reset time, or a window is still full (for example the weekly one), it simply waits for that reset, and waiting costs no attempt. It types only at the limit message or an empty prompt: never over a permission prompt, a question from Claude or text you have not sent. If the limit keeps coming back, it types one message per real reset. A session you stop or restart forgets its limit. **Resume now** on a session does the same without waiting.
+
+**Usage bars.** The bars keep the last good reading. When it is older than 3 minutes they show "as of HH:mm" instead of jumping to empty.
+
+> [!NOTE]
+> Limit detection reads Claude's screen. If a Claude Code update changes how the limit message looks, the detection patterns may need updating.
+
+## 11. Updating and redeploying
 
 Redeploy in Coolify to pick up the latest `live` (or turn on auto-deploy for the resource). Database migrations run automatically when the panel container starts, and a failed migration stops it before it serves anything. Running sessions keep the image and config they started with. New sessions use the new ones.
 
@@ -113,7 +130,7 @@ Maintainers release by merging `main` into `live`:
 git switch live && git merge --ff-only main && git push origin live
 ```
 
-## 11. Local development
+## 12. Local development
 
 ```bash
 cp .env.example .env.local                        # fill in PANEL_ENCRYPTION_KEY: openssl rand -base64 32
@@ -134,7 +151,7 @@ npm --prefix runner test            # runner tests
 
 The Playwright smoke test (`pnpm --dir panel test:e2e`) runs against `docker-compose.e2e.yml`, a production build of the stack with stubs for Cloudflare Access, GitHub and Claude and without Sysbox. Its header comment has the commands. The runner API contract is in [`docs/runner-contract.md`](docs/runner-contract.md).
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|

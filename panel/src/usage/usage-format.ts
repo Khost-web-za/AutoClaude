@@ -1,4 +1,6 @@
 import type { UsageResetDisplay } from '@/db/schema';
+import { formatHourMinute } from '@/time/clock-time';
+import type { UsageWindow } from './usage-types';
 
 export type UsageTone = 'ok' | 'warn' | 'danger';
 
@@ -51,4 +53,19 @@ export function formatReset(
   if (mode === 'countdown') return formatCountdown(diffMs);
   if (diffMs > DAY_MS) return clockParts(resetsAt, timeZone, true);
   return `at ${clockParts(resetsAt, timeZone, false)}`;
+}
+
+/** A window whose reset time has passed has rolled over: it reads 0% until the next reading says otherwise. */
+export function effectiveWindow(window: UsageWindow, now: Date): UsageWindow {
+  if (window.resetsAt && window.resetsAt.getTime() <= now.getTime()) return { pct: 0, resetsAt: null };
+  return window;
+}
+
+const STALE_AFTER_MS = 3 * MINUTE_MS;
+
+/** `as of 03:12` (24 h, in the settings zone) once a reading is 3+ minutes old; null while it is fresh. */
+export function staleLabel(fetchedAt: Date, now: Date, timeZone: string): string | null {
+  if (now.getTime() - fetchedAt.getTime() < STALE_AFTER_MS) return null;
+  const text = formatHourMinute(fetchedAt, timeZone);
+  return `as of ${text}`;
 }

@@ -1,4 +1,4 @@
-import type { SessionStatus } from '@/db/schema';
+import type { LimitState, SessionStatus } from '@/db/schema';
 
 export type RunnerEventType = 'boot_step' | 'remote_control_url' | 'hook' | 'workspace_sync' | 'claude_exited';
 
@@ -11,6 +11,9 @@ export type RunnerEvent = {
 export type StatusChange = { status: SessionStatus; detail?: string };
 
 const str = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
+
+/** The supervisor gave up on Claude: it exited too often and will not be restarted. */
+const isFatalExit = (data: Record<string, unknown>) => data.fatal === true && data.restarting !== true;
 
 /** The session status machine: what a runner event does to a session, or null for "no change". */
 export function nextStatus(current: SessionStatus, event: RunnerEvent): StatusChange | null {
@@ -50,8 +53,42 @@ export function nextStatus(current: SessionStatus, event: RunnerEvent): StatusCh
     case 'workspace_sync':
       return null;
     case 'claude_exited':
-      return data.fatal === true && data.restarting !== true ? { status: 'failed' } : null;
+      return isFatalExit(data) ? { status: 'failed' } : null;
   }
+}
+
+export const CRASHED_DETAIL = 'Resume failed: Claude crashed';
+
+export type LimitChange = {
+  limitState: LimitState;
+  resumeAttempts?: number;
+  limitResetsAt?: null;
+  resumeNextAt: null;
+  limitDetail: string | null;
+};
+
+/** No limit: what a prompt reaching Claude, a stop, a restart or switching auto-resume off leaves. */
+export const CLEARED_LIMIT = {
+  limitState: 'none',
+  resumeAttempts: 0,
+  limitResetsAt: null,
+  resumeNextAt: null,
+  limitDetail: null,
+} as const satisfies LimitChange;
+
+/**
+ * What a runner event does to a session's limit state, or null for "no change": a prompt reaching Claude
+ * means it is back (the limit is over, or the user carried on by hand after a failed resume), a fatal exit
+ * means a waiting session never will be.
+ */
+export function nextLimitState(current: LimitState, event: RunnerEvent): LimitChange | null {
+  if (current === 'none') return null;
+  if (event.type === 'hook' && event.data.event === 'UserPromptSubmit') return { ...CLEARED_LIMIT };
+  if (current === 'failed') return null;
+  if (event.type === 'claude_exited' && isFatalExit(event.data)) {
+    return { limitState: 'failed', resumeNextAt: null, limitDetail: CRASHED_DETAIL };
+  }
+  return null;
 }
 
 const SENSITIVE_KEY = /token|secret|password|key/i;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { SessionStatus } from '@/db/schema';
+import type { LimitState, SessionStatus } from '@/db/schema';
 import { useLive } from '@/live/use-live';
 
 export type LiveSessionPatch = { status: SessionStatus; detail: string | null; remoteControlUrl?: string };
@@ -47,4 +47,37 @@ export function withLivePatch<T extends { id: string; status: SessionStatus; rem
     status: patch.status,
     remoteControlUrl: patch.status === 'starting' ? null : (patch.remoteControlUrl ?? row.remoteControlUrl),
   };
+}
+
+export type LiveLimitPatch = { limitState: LimitState; resumeAt: Date | null; detail: string | null };
+export type LiveLimitPatches = ReadonlyMap<string, LiveLimitPatch>;
+
+const NO_LIMITS: LiveLimitPatches = new Map();
+
+/** Limit and resume state pushed by `session_limit` live events; replaced by new server data like the status patches. */
+export function useLiveLimitPatches(source: unknown): LiveLimitPatches {
+  const [state, setState] = useState<{ source: unknown; patches: LiveLimitPatches }>({ source, patches: NO_LIMITS });
+  if (state.source !== source) setState({ source, patches: NO_LIMITS });
+  useLive((event) => {
+    if (event.kind !== 'session_limit') return;
+    setState((current) => {
+      const next = new Map(current.patches);
+      next.set(event.sessionId, {
+        limitState: event.limitState,
+        resumeAt: event.resumeAt ? new Date(event.resumeAt) : null,
+        detail: event.detail,
+      });
+      return { ...current, patches: next };
+    });
+  });
+  return state.source === source ? state.patches : NO_LIMITS;
+}
+
+type LimitFields = { id: string; limitState: LimitState; resumeAt: Date | null; limitDetail: string | null };
+
+/** A row with its live limit patch applied. */
+export function withLiveLimitPatch<T extends LimitFields>(row: T, patches: LiveLimitPatches): T {
+  const patch = patches.get(row.id);
+  if (!patch) return row;
+  return { ...row, limitState: patch.limitState, resumeAt: patch.resumeAt, limitDetail: patch.detail };
 }

@@ -1,5 +1,6 @@
 import { GitBranch } from 'lucide-react';
 import Link from 'next/link';
+import { LimitBadge } from '@/auto-resume/limit-badge';
 import { StatusDot } from '@/ui/status-dot';
 import { formatAge } from '@/time/relative-time';
 import { dotStatus, openableRemoteUrl } from './display-status';
@@ -13,13 +14,16 @@ import { WorkStateLabel } from './work-state-label';
  * you check on a phone), the task gets two lines, and Open in Claude is a full-height tap target. The
  * whole block opens the session (stretched link); Open in Claude sits above it.
  */
-export function SessionCards({ rows, now }: { rows: readonly SessionListRow[]; now: Date }) {
+export function SessionCards({ rows, now, timeZone }: { rows: readonly SessionListRow[]; now: Date; timeZone: string }) {
   return (
     <ul className="-mx-4 flex flex-col divide-y divide-border border-y border-border sm:mx-0">
       {rows.map((row) => (
         <li key={row.id} className="relative flex flex-col gap-2 px-4 py-4 active:bg-surface sm:px-0">
           <div className="flex items-center justify-between gap-3">
-            <StatusDot status={dotStatus(row.status)} showLabel />
+            <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+              <StatusDot status={dotStatus(row.status)} showLabel />
+              <LimitBadge state={row.limitState} resumeAt={row.resumeAt} detail={row.limitDetail} timeZone={timeZone} />
+            </span>
             <span className="text-xs text-text-subtle tabular-nums">{formatAge(row.createdAt, now)}</span>
           </div>
           <Link

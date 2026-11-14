@@ -5,3 +5,5 @@ export * from './session-events';
 export * from './session-profiles';
 export * from './sessions';
 export * from './settings';
+export * from './usage-cache';
+export * from './window-kickoffs';

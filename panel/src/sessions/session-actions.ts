@@ -23,6 +23,7 @@ import type {
 } from './session-action-result';
 import { isSessionId, SessionNotFoundError } from './session-record';
 import { restartSession, startSession } from './start-session';
+import { setAutoResume } from './set-auto-resume';
 import { stopSession } from './stop-session';
 
 /** Turns an orchestrator error into a typed, display-safe result. Unknown errors are logged by name only. */
@@ -78,7 +79,8 @@ export async function startSessionAction(request: unknown): Promise<StartSession
     validation = await validateNewSession(request, {
       profiles: catalog.profiles,
       resolveRepo: assertRepoAccessible,
-      readDeliveryMode: (name) => readRepoSettings(name).then((settings) => settings.deliveryMode),
+      readRepoDefaults: (name) =>
+        readRepoSettings(name).then(({ deliveryMode, autoResume }) => ({ deliveryMode, autoResume })),
     });
   } catch (error) {
     // validateNewSession only throws what GitHub threw (an outage); "not accessible" is a field error.
@@ -132,6 +134,20 @@ export async function clearSessionAction(id: unknown): Promise<SessionActionResu
     return failure('clear the conversation', error);
   }
   return { ok: true, message: 'Conversation cleared. The workspace will sync with the remote.' };
+}
+
+/** Turns auto-resume on or off for one session; off also clears any limit it was waiting on. */
+export async function setAutoResumeAction(id: unknown, enabled: unknown): Promise<SessionActionResult> {
+  await requireOwner();
+  if (typeof id !== 'string' || !isSessionId(id)) return invalidId;
+  if (typeof enabled !== 'boolean') return { ok: false, reason: 'invalid', message: 'Pick on or off.' };
+  try {
+    await setAutoResume(id, enabled);
+  } catch (error) {
+    return failure('change auto-resume', error);
+  }
+  revalidateSessions();
+  return { ok: true, message: enabled ? 'Auto-resume turned on.' : 'Auto-resume turned off.' };
 }
 
 /**

@@ -1,17 +1,22 @@
 'use client';
 
 import { Button } from '@heroui/react';
-import { RotateCcw, Square } from 'lucide-react';
+import { Play, RotateCcw, Square } from 'lucide-react';
+import { useOptimistic, useTransition } from 'react';
+import { notifyError, notifySuccess, UNREACHABLE_MESSAGE } from '@/feedback/toast-host';
+import { AutoResumeField } from './auto-resume-field';
 import { ClearSessionDialog } from './clear-session-dialog';
 import { holdsRunningSlot } from './running-statuses';
 import { DeleteSessionDialog } from './delete-session-dialog';
+import { setAutoResumeAction } from './session-actions';
 import { useSessionLive } from './session-live-context';
 import { LiveOpenInClaude } from './session-status-badge';
 
-/** Stop / Restart (or Start again) / Delete. Stop and Restart are optimistic; see SessionLiveProvider. */
+/** Stop / Restart (or Start again) / Resume now / Delete. Stop and Restart are optimistic; see SessionLiveProvider. */
 function SessionButtons({ compact }: { compact: boolean }) {
-  const { status, pending, hasContainer, run } = useSessionLive();
+  const { status, pending, hasContainer, limitState, run } = useSessionLive();
   const running = holdsRunningSlot(status);
+  const canResumeNow = running && hasContainer && (limitState === 'limited' || limitState === 'failed');
   const busy = pending !== null;
   return (
     <>
@@ -37,6 +42,12 @@ function SessionButtons({ compact }: { compact: boolean }) {
         >
           <RotateCcw aria-hidden className="size-4" />
           {running ? 'Restart' : 'Start again'}
+        </Button>
+      ) : null}
+      {canResumeNow ? (
+        <Button variant="secondary" isDisabled={busy} isPending={pending === 'resume'} onPress={() => run('resume')} className="min-h-11 gap-2">
+          <Play aria-hidden className="size-4" />
+          Resume now
         </Button>
       ) : null}
       {running ? <ClearSessionDialog /> : null}
@@ -65,4 +76,26 @@ export function SessionActionBar() {
       <SessionButtons compact />
     </div>
   );
+}
+
+/** The per-session auto-resume switch: flips at once, snaps back and says why when the server refuses. */
+export function SessionAutoResumeSwitch() {
+  const { id, autoResume } = useSessionLive();
+  const [selected, setSelected] = useOptimistic(autoResume);
+  const [, startTransition] = useTransition();
+
+  function change(enabled: boolean) {
+    startTransition(async () => {
+      setSelected(enabled);
+      try {
+        const result = await setAutoResumeAction(id, enabled);
+        if (result.ok) notifySuccess(result.message);
+        else notifyError(result.message);
+      } catch {
+        notifyError(UNREACHABLE_MESSAGE);
+      }
+    });
+  }
+
+  return <AutoResumeField isSelected={selected} onChange={change} />;
 }

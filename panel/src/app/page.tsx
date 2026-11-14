@@ -9,6 +9,7 @@ import { countSessionTabs, listSessions, parseSessionQuery } from '@/sessions/se
 import { SessionListView } from '@/sessions/session-list-view';
 import { parseSessionTab, SESSION_TABS, sessionsHref } from '@/sessions/session-tabs';
 import { readSetupState, SetupChecklist, setupComplete } from '@/sessions/setup-checklist';
+import { getSettings } from '@/settings/settings-store';
 import { EmptyState } from '@/ui/empty-state';
 import { PageHeader } from '@/ui/page-header';
 import { PageLinks } from '@/ui/page-links';
@@ -37,10 +38,11 @@ export default async function SessionsPage({ searchParams }: Props) {
   const params = await searchParams;
   const tab = parseSessionTab(params.tab);
   const query = parseSessionQuery(params.q);
-  const [page, counts, orphans] = await Promise.all([
+  const [page, counts, orphans, settings] = await Promise.all([
     listSessions({ tab, query, page: parsePageParam(params.page) }),
     countSessionTabs(query),
     loadOrphans(),
+    getSettings(),
   ]);
   const setup = counts.all === 0 && !query ? await readSetupState() : null;
   const now = new Date();
@@ -68,7 +70,7 @@ export default async function SessionsPage({ searchParams }: Props) {
   } else {
     body = (
       <>
-        <SessionListView rows={page.items} now={now} />
+        <SessionListView rows={page.items} now={now} timeZone={settings.timeZone} />
         <PageLinks page={page.page} pageCount={page.pageCount} hrefFor={(n) => sessionsHref({ tab, query, page: n })} />
       </>
     );

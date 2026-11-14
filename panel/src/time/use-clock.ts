@@ -4,8 +4,8 @@ import { useEffect, useState } from 'react';
 
 const TICK_MS = 30_000;
 
-/** "Now" for the countdowns, advanced every 30 s. Fresh data arrives over the live stream, not by polling. */
-export function useUsageClock(initial: Date): Date {
+/** "Now" for countdowns and relative times, advanced every 30 s. Fresh data arrives over the live stream, not by polling. */
+export function useClock(initial: Date): Date {
   const [tick, setTick] = useState<Date | null>(null);
 
   useEffect(() => {

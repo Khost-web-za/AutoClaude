@@ -1,5 +1,6 @@
 'use client';
 
+import { LimitBadge } from '@/auto-resume/limit-badge';
 import { StatusDot } from '@/ui/status-dot';
 import { dotStatus } from './display-status';
 import { OpenInClaudeButton } from './open-in-claude-button';
@@ -31,4 +32,10 @@ export function SessionStatusDetail() {
 export function LiveOpenInClaude({ className }: { className?: string }) {
   const { remoteControlUrl } = useSessionLive();
   return <OpenInClaudeButton url={remoteControlUrl} className={className} />;
+}
+
+/** The header's limit / resume badge, next to the status pill. */
+export function SessionLimitBadge() {
+  const { limitState, resumeAt, limitDetail, timeZone } = useSessionLive();
+  return <LimitBadge state={limitState} resumeAt={resumeAt} detail={limitDetail} timeZone={timeZone} />;
 }

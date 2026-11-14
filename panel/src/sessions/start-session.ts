@@ -26,7 +26,8 @@ import {
 import { buildContainerSpec, supportsStorageOpt } from './container-spec';
 import { removeSessionResources } from './delete-session';
 import { sharedSessionDeps, type SessionDeps } from './session-deps';
-import { loadLiveSession, setSessionStatus } from './session-record';
+import { loadLiveSession, publishLimitCleared, setSessionStatus } from './session-record';
+import { CLEARED_LIMIT } from './session-status';
 import { sessionShortId, workBranchName } from './work-branch';
 
 export type StartSessionInput = {
@@ -35,6 +36,7 @@ export type StartSessionInput = {
   profiles: string[];
   startingTask: string | null;
   deliveryMode: DeliveryMode;
+  autoResume: boolean;
 };
 
 const MAX_ID_ATTEMPTS = 16;
@@ -137,7 +139,7 @@ export async function startSession(
   if (merged.warnings.length > 0) console.warn(`[sessions] config warnings: ${merged.warnings.join('; ')}`);
 
   const secret = randomBytes(32).toString('base64url');
-  const { deliveryMode } = input;
+  const { deliveryMode, autoResume } = input;
   // Push mode works on the base branch itself, so that is the branch only one live session may hold.
   const startedRow = deps.db.transaction(async (tx) => {
     const { limits, running } = await lockCapacity(tx);
@@ -156,6 +158,7 @@ export async function startSession(
       defaultBranch,
       startingTask,
       deliveryMode,
+      autoResume,
       status: 'starting',
       secretHash: hashSessionSecret(secret),
     });
@@ -283,14 +286,16 @@ export async function restartSession(id: string, deps: SessionDeps = sharedSessi
     if (!isRunning && current.deliveryMode === 'push') {
       await assertBranchFree(tx, current.repoFullName, current.workBranch, current.id);
     }
+    // A restarted Claude starts afresh: a limit from before (or a crashed resume) no longer applies.
     await tx
       .update(sessions)
-      .set({ status: 'starting', statusDetail: null, endedAt: null, remoteControlUrl: null })
+      .set({ ...CLEARED_LIMIT, status: 'starting', statusDetail: null, endedAt: null, remoteControlUrl: null })
       .where(eq(sessions.id, row.id));
-    return { wasRunning: isRunning, remoteControlUrl: current.remoteControlUrl };
+    return { wasRunning: isRunning, remoteControlUrl: current.remoteControlUrl, hadLimit: current.limitState !== 'none' };
   });
-  const { wasRunning, remoteControlUrl } = await mapBranchBusy(deps, row.repoFullName, row.workBranch, restarted, row.id);
+  const { wasRunning, remoteControlUrl, hadLimit } = await mapBranchBusy(deps, row.repoFullName, row.workBranch, restarted, row.id);
   deps.eventBus.publish({ kind: 'session', sessionId: row.id, status: 'starting' });
+  if (hadLimit) publishLimitCleared(deps, row.id);
 
   const container = deps.docker.getContainer(row.containerId);
   try {

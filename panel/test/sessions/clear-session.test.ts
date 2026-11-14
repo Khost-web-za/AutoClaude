@@ -28,7 +28,7 @@ describe('clearSession', () => {
     expect(getContainer).toHaveBeenCalledWith('c1');
     expect(execInRepo.mock.calls.map(([, c, cmd]) => [c, cmd])).toEqual([
       [container, ['tmux', 'send-keys', '-t', 'claude', 'C-u']],
-      [container, ['tmux', 'send-keys', '-t', 'claude', '-l', '/clear']],
+      [container, ['tmux', 'send-keys', '-t', 'claude', '-l', '--', '/clear']],
       [container, ['tmux', 'send-keys', '-t', 'claude', 'Enter']],
     ]);
   });

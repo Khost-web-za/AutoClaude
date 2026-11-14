@@ -1,5 +1,5 @@
 import { Meter } from '@heroui/react';
-import { formatReset, usageTone, type UsageTone } from './usage-format';
+import { effectiveWindow, formatReset, usageTone, type UsageTone } from './usage-format';
 import type { UsageViewSettings } from './usage-data';
 import type { UsageWindow } from './usage-types';
 
@@ -22,7 +22,7 @@ export function roundPct(pct: number): number {
 /** A labelled usage bar with its percentage and, when the window reports one, its reset time. */
 export function UsageWindowRow({
   label,
-  window,
+  window: reading,
   now,
   settings,
   className = '',
@@ -33,6 +33,7 @@ export function UsageWindowRow({
   settings: UsageViewSettings;
   className?: string;
 }) {
+  const window = effectiveWindow(reading, now);
   const tone = usageTone(window.pct, settings.warnPct, settings.dangerPct);
   const value = Math.min(100, Math.max(0, window.pct));
   return (

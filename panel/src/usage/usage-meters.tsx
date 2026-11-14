@@ -1,17 +1,20 @@
 'use client';
 
 import { Tooltip } from '@heroui/react';
+import { staleLabel } from './usage-format';
 import { unavailableDetail } from './usage-labels';
 import type { UsageViewData } from './usage-data';
 import { UsageWindowRow } from './usage-window-row';
 import { useLiveUsage } from './use-live-usage';
-import { useUsageClock } from './use-usage-clock';
+import { useClock } from '@/time/use-clock';
 
 /** Desktop header: the 5-hour and weekly bars side by side; per-model weekly windows in the tooltip. */
 export function UsageMeters({ data: initial, className = '' }: { data: UsageViewData; className?: string }) {
   const data = useLiveUsage(initial);
-  const now = useUsageClock(data.renderedAt);
+  const now = useClock(data.renderedAt);
   const { snapshot, settings } = data;
+
+  const stale = snapshot ? staleLabel(snapshot.fetchedAt, now, settings.timeZone) : null;
 
   if (!snapshot) {
     return (
@@ -32,6 +35,7 @@ export function UsageMeters({ data: initial, className = '' }: { data: UsageView
         <div tabIndex={0} className="flex items-start gap-5 rounded-md px-2 py-1 outline-focus focus-visible:outline-2">
           <UsageWindowRow label="5 hours" window={snapshot.fiveHour} now={now} settings={settings} className="w-32" />
           <UsageWindowRow label="Week" window={snapshot.weekly} now={now} settings={settings} className="w-32" />
+          {stale ? <span className="self-center text-xs text-text-subtle">{stale}</span> : null}
         </div>
       </Tooltip.Trigger>
       {snapshot.extra.length > 0 ? (

@@ -9,6 +9,7 @@ const startSession = vi.fn();
 const restartSession = vi.fn();
 const stopSession = vi.fn();
 const clearSession = vi.fn();
+const setAutoResume = vi.fn();
 const deleteSession = vi.fn();
 const refreshGitState = vi.fn();
 const assertRepoAccessible = vi.fn();
@@ -21,6 +22,7 @@ vi.mock('@/env/panel-env', () => ({ getPanelEnv: () => ({ configsDir: '/configs'
 vi.mock('@/sessions/start-session', () => ({ startSession, restartSession }));
 vi.mock('@/sessions/stop-session', () => ({ stopSession }));
 vi.mock('@/sessions/clear-session', () => ({ clearSession }));
+vi.mock('@/sessions/set-auto-resume', () => ({ setAutoResume }));
 vi.mock('@/sessions/delete-session', async (importOriginal) => ({
   ...(await importOriginal<typeof DeleteModule>()),
   deleteSession,
@@ -40,7 +42,7 @@ const { BranchBusyError, CapacityError, StartBlockedError, InsufficientDiskError
 const { DeleteNeedsConfirmationError } = await import('@/sessions/delete-session');
 const { SessionNotFoundError } = await import('@/sessions/session-record');
 const { StackDiscoveryError } = await import('@/docker/self-discovery');
-const { clearSessionAction, deleteSessionAction, restartSessionAction, startSessionAction, stopSessionAction } = await import(
+const { clearSessionAction, deleteSessionAction, restartSessionAction, setAutoResumeAction, startSessionAction, stopSessionAction } = await import(
   '@/sessions/session-actions'
 );
 
@@ -54,7 +56,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   assertRepoAccessible.mockResolvedValue({ fullName: 'Acme/Widgets', private: true, defaultBranch: 'main', pushedAt: null });
   listProfiles.mockResolvedValue({ profiles: ['base', 'frontend'].map(profile), warnings: [] });
-  readRepoSettings.mockResolvedValue({ defaultBaseBranch: null, defaultProfiles: [], deliveryMode: 'pull_request' });
+  readRepoSettings.mockResolvedValue({ defaultBaseBranch: null, defaultProfiles: [], deliveryMode: 'pull_request', autoResume: false, resumeMessage: 'Please continue where you left off.' });
   startSession.mockResolvedValue({ sessionId: SESSION_ID });
 });
 
@@ -67,7 +69,7 @@ describe('startSessionAction', () => {
 
   it('starts with the canonical repository name and answers with the session id', async () => {
     expect(await startSessionAction(request)).toEqual({ ok: true, sessionId: SESSION_ID });
-    expect(startSession).toHaveBeenCalledWith({ ...request, repoFullName: 'Acme/Widgets', deliveryMode: 'pull_request' });
+    expect(startSession).toHaveBeenCalledWith({ ...request, repoFullName: 'Acme/Widgets', deliveryMode: 'pull_request', autoResume: false });
     expect(readRepoSettings).toHaveBeenCalledWith('Acme/Widgets');
     expect(revalidatePath).toHaveBeenCalled();
   });
@@ -204,5 +206,37 @@ describe('clearSessionAction', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     clearSession.mockRejectedValueOnce(new Error('boom'));
     expect(await clearSessionAction(SESSION_ID)).toMatchObject({ ok: false, reason: 'unavailable' });
+  });
+});
+
+describe('setAutoResumeAction', () => {
+  it('checks the owner before anything else', async () => {
+    requireOwner.mockRejectedValueOnce(new Error('NEXT_HTTP_ERROR_FALLBACK;403'));
+    await expect(setAutoResumeAction(SESSION_ID, true)).rejects.toThrow('403');
+    expect(setAutoResume).not.toHaveBeenCalled();
+  });
+
+  it('turns it on and revalidates', async () => {
+    setAutoResume.mockResolvedValueOnce(undefined);
+    expect(await setAutoResumeAction(SESSION_ID, true)).toMatchObject({ ok: true, message: expect.any(String) });
+    expect(setAutoResume).toHaveBeenCalledWith(SESSION_ID, true);
+    expect(revalidatePath).toHaveBeenCalled();
+  });
+
+  it('turns it off', async () => {
+    setAutoResume.mockResolvedValueOnce(undefined);
+    expect(await setAutoResumeAction(SESSION_ID, false)).toMatchObject({ ok: true });
+    expect(setAutoResume).toHaveBeenCalledWith(SESSION_ID, false);
+  });
+
+  it('rejects a bad id or a non-boolean without touching the session', async () => {
+    expect(await setAutoResumeAction('nope', true)).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(await setAutoResumeAction(SESSION_ID, 'yes')).toMatchObject({ ok: false, reason: 'invalid' });
+    expect(setAutoResume).not.toHaveBeenCalled();
+  });
+
+  it('answers an unknown session as not-found', async () => {
+    setAutoResume.mockRejectedValueOnce(new SessionNotFoundError(SESSION_ID));
+    expect(await setAutoResumeAction(SESSION_ID, true)).toMatchObject({ ok: false, reason: 'not-found' });
   });
 });

@@ -1,0 +1,16 @@
+# synthetic: written from Claude Code's on-screen strings, not captured from a live session
+
+> check the items api
+
+⏺ Bash(curl -s https://api.example.com/items)
+  ⎿  {"error": "Rate limit reached for requests", "retry": "resets 3pm"}
+
+⏺ Bash(cat test/fixtures/limit-screens/limit-5-hour.txt)
+  ⎿  5-hour limit reached ∙ resets 3pm
+
+✻ Working… (esc to interrupt)
+
+────────────────────────────────────────────────────────────────────────
+> 
+────────────────────────────────────────────────────────────────────────
+  ? for shortcuts

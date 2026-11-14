@@ -69,6 +69,19 @@ describe('reconcile', () => {
       expect(calls).toEqual([]);
     }));
 
+  it('a session it marks stopped no longer waits on a limit', () =>
+    withTestDb(async ({ db }) => {
+      const id = await insertSession(db, 'idle', 'c-gone');
+      await db
+        .update(sessions)
+        .set({ limitState: 'limited', limitResetsAt: new Date(), resumeNextAt: new Date(), resumeAttempts: 1 })
+        .where(eq(sessions.id, id));
+      const published: unknown[] = [];
+      await reconcile(testDeps(db, { docker: fakeDocker().docker, eventBus: { publish: (event) => void published.push(event) } }));
+      expect(await rowOf(db, id)).toMatchObject({ status: 'stopped', limitState: 'none', resumeNextAt: null, resumeAttempts: 0 });
+      expect(published).toContainEqual({ kind: 'session_limit', sessionId: id, limitState: 'none', resumeAt: null, detail: null });
+    }));
+
   it('writes are compare-and-set: a row that changed after the read is not overwritten', () =>
     withTestDb(async ({ db }) => {
       const id = await insertSession(db, 'working', 'c-1');

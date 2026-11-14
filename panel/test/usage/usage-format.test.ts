@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatReset, usageTone } from '@/usage/usage-format';
+import { effectiveWindow, formatReset, staleLabel, usageTone } from '@/usage/usage-format';
 
 const now = new Date('2026-11-12T12:00:00Z');
 const at = (offsetMs: number) => new Date(now.getTime() + offsetMs);
@@ -41,5 +41,30 @@ describe('usageTone', () => {
     expect(usageTone(80, 80, 95)).toBe('warn');
     expect(usageTone(94.9, 80, 95)).toBe('warn');
     expect(usageTone(95, 80, 95)).toBe('danger');
+  });
+});
+
+describe('effectiveWindow', () => {
+  it('resets a passed window', () => {
+    expect(effectiveWindow({ pct: 73, resetsAt: at(-MIN) }, now)).toEqual({ pct: 0, resetsAt: null });
+    expect(effectiveWindow({ pct: 73, resetsAt: now }, now)).toEqual({ pct: 0, resetsAt: null });
+  });
+  it('keeps a future window', () => {
+    const window = { pct: 73, resetsAt: at(MIN) };
+    expect(effectiveWindow(window, now)).toBe(window);
+    const open = { pct: 10, resetsAt: null };
+    expect(effectiveWindow(open, now)).toBe(open);
+  });
+});
+
+describe('staleLabel', () => {
+  const fetchedAt = new Date('2026-11-14T01:12:00Z');
+  it('is null under 3 minutes', () => {
+    expect(staleLabel(fetchedAt, new Date(fetchedAt.getTime() + 2 * MIN + 59_000), 'UTC')).toBeNull();
+  });
+  it('formats in the settings time zone', () => {
+    const later = new Date(fetchedAt.getTime() + 3 * MIN);
+    expect(staleLabel(fetchedAt, later, 'Europe/London')).toBe('as of 01:12');
+    expect(staleLabel(fetchedAt, later, 'Africa/Johannesburg')).toBe('as of 03:12');
   });
 });

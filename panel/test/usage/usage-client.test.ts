@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { ClaudeCredentials } from '@/claude/credentials-volume';
 import { createUsageClient, parseUsage, type UsageClientDeps } from '@/usage/usage-client';
+import type { UsageSnapshot } from '@/usage/usage-types';
 
 const sample: unknown = JSON.parse(
   readFileSync(path.join(import.meta.dirname, '..', 'fixtures', 'usage', 'oauth-usage-pro.json'), 'utf8'),
@@ -22,7 +23,8 @@ function creds(expiresAt: number): ClaudeCredentials {
   };
 }
 
-function setup(overrides: Partial<UsageClientDeps> = {}, response: () => Response = () => Response.json(sample)) {
+function setup(overrides: Partial<UsageClientDeps> = {}, initialResponse: () => Response = () => Response.json(sample)) {
+  let response = initialResponse;
   let now = NOW;
   const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => response());
   const publish = vi.fn();
@@ -33,9 +35,11 @@ function setup(overrides: Partial<UsageClientDeps> = {}, response: () => Respons
     readCredentials: async () => creds(NOW + 3_600_000),
     publish,
     warn,
+    loadLast: async () => null,
+    saveLast: async () => {},
     ...overrides,
   });
-  return { client, fetchMock, publish, warn, advance: (ms: number) => (now += ms) };
+  return { client, fetchMock, publish, warn, setResponse: (next: () => Response) => (response = next), advance: (ms: number) => (now += ms) };
 }
 
 describe('parseUsage', () => {
@@ -81,12 +85,12 @@ describe('getUsage', () => {
     const headers = new Headers((init as RequestInit).headers);
     expect(headers.get('authorization')).toBe('Bearer tok-secret');
     expect(headers.get('anthropic-beta')).toBe('oauth-2025-04-20');
-    expect(publish).toHaveBeenCalledWith({ kind: 'usage', usage: snapshot });
+    expect(publish).toHaveBeenCalledWith({ kind: 'usage', usage: snapshot, stale: false, reason: null });
   });
 
   it('401 gives null with reason http-401, logged once, without leaking the token', async () => {
     const { client, warn } = setup({}, () => new Response('no', { status: 401 }));
-    expect(await client.getUsageResult()).toEqual({ ok: false, reason: 'http-401' });
+    expect(await client.getUsageResult()).toEqual({ snapshot: null, stale: false, reason: 'http-401' });
     expect(await client.getUsage()).toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(warn.mock.calls)).not.toContain('tok-secret');
@@ -94,21 +98,21 @@ describe('getUsage', () => {
 
   it('expired credentials give null expired and make no HTTP call', async () => {
     const { client, fetchMock } = setup({ readCredentials: async () => creds(NOW - 1) });
-    expect(await client.getUsageResult()).toEqual({ ok: false, reason: 'expired' });
+    expect(await client.getUsageResult()).toEqual({ snapshot: null, stale: false, reason: 'expired' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('missing credentials give no-credentials', async () => {
     const { client, fetchMock } = setup({ readCredentials: async () => null });
-    expect(await client.getUsageResult()).toEqual({ ok: false, reason: 'no-credentials' });
+    expect(await client.getUsageResult()).toEqual({ snapshot: null, stale: false, reason: 'no-credentials' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('network errors and unparsable bodies give unavailable and never throw', async () => {
     const boom = setup({ fetch: (async () => Promise.reject(new Error('down'))) as typeof fetch });
-    expect(await boom.client.getUsageResult()).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await boom.client.getUsageResult()).toEqual({ snapshot: null, stale: false, reason: 'unavailable' });
     const junk = setup({}, () => new Response('not json', { status: 200 }));
-    expect(await junk.client.getUsageResult()).toEqual({ ok: false, reason: 'unavailable' });
+    expect(await junk.client.getUsageResult()).toEqual({ snapshot: null, stale: false, reason: 'unavailable' });
   });
 
   it('caches for 60 s, then fetches again', async () => {
@@ -126,5 +130,82 @@ describe('getUsage', () => {
     const { client, fetchMock } = setup();
     await Promise.all([client.getUsage(), client.getUsage()]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('last good snapshot', () => {
+  const persisted: UsageSnapshot = {
+    fiveHour: { pct: 10, resetsAt: new Date('2026-11-12T15:00:00Z') },
+    weekly: { pct: 20, resetsAt: null },
+    extra: [],
+    fetchedAt: new Date(NOW - 600_000),
+  };
+
+  it('keeps the last good snapshot after a failure', async () => {
+    const { client, setResponse, advance } = setup();
+    const first = await client.getUsageResult();
+    expect(first).toMatchObject({ stale: false, reason: null });
+    setResponse(() => new Response('boom', { status: 500 }));
+    advance(61_000);
+    const second = await client.getUsageResult();
+    expect(second).toEqual({ snapshot: first.snapshot, stale: true, reason: 'http-500' });
+  });
+
+  it('loads the persisted snapshot when the first fetch fails', async () => {
+    const { client } = setup({ loadLast: async () => persisted }, () => new Response('slow', { status: 429 }));
+    expect(await client.getUsageResult()).toEqual({ snapshot: persisted, stale: true, reason: 'http-429' });
+  });
+
+  it('saves each good snapshot', async () => {
+    const saveLast = vi.fn(async (_snapshot: UsageSnapshot) => {});
+    const { client, advance } = setup({ saveLast });
+    await client.getUsage();
+    advance(61_000);
+    await client.getUsage();
+    expect(saveLast).toHaveBeenCalledTimes(2);
+    expect(saveLast.mock.calls[0]![0].fiveHour.pct).toBe(35);
+  });
+
+  it('never throws when persistence fails', async () => {
+    const { client } = setup({
+      loadLast: async () => Promise.reject(new Error('db down')),
+      saveLast: async () => Promise.reject(new Error('db down')),
+    });
+    expect((await client.getUsageResult()).snapshot?.fiveHour.pct).toBe(35);
+    const failing = setup({ loadLast: async () => Promise.reject(new Error('db down')) }, () => new Response('x', { status: 500 }));
+    expect(await failing.client.getUsageResult()).toEqual({ snapshot: null, stale: false, reason: 'http-500' });
+  });
+
+  it('waits 5 minutes after a 429', async () => {
+    const { client, fetchMock, advance } = setup({}, () => new Response('slow', { status: 429 }));
+    await client.getUsage();
+    advance(61_000);
+    await client.getUsage();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    advance(5 * 60_000);
+    await client.getUsage();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('refresh bypasses the cache', async () => {
+    const { client, fetchMock } = setup();
+    await client.getUsage();
+    await client.refresh();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('publishes stale and reason', async () => {
+    const { client, publish, setResponse, advance } = setup();
+    await client.getUsage();
+    setResponse(() => new Response('boom', { status: 500 }));
+    advance(61_000);
+    const result = await client.getUsageResult();
+    expect(publish).toHaveBeenLastCalledWith({ kind: 'usage', usage: result.snapshot, stale: true, reason: 'http-500' });
+  });
+
+  it('snapshot is null only when nothing was ever good', async () => {
+    const { client } = setup({}, () => new Response('boom', { status: 500 }));
+    const result = await client.getUsageResult();
+    expect(result).toEqual({ snapshot: null, stale: false, reason: 'http-500' });
   });
 });

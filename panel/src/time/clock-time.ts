@@ -10,3 +10,14 @@ export function formatClock(date: Date, timeZone: string): string {
   }
   return text.replace(/\s/g, ' ');
 }
+
+const HOUR_MINUTE_OPTIONS: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' };
+
+/** `03:12` (24 h) in the given zone, UTC when the zone is unknown. */
+export function formatHourMinute(date: Date, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { ...HOUR_MINUTE_OPTIONS, timeZone }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat('en-GB', { ...HOUR_MINUTE_OPTIONS, timeZone: 'UTC' }).format(date);
+  }
+}

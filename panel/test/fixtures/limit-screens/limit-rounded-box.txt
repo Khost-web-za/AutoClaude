@@ -1,0 +1,10 @@
+# synthetic: written from Claude Code's on-screen strings, not captured from a live session
+
+> refactor the parser
+
+  ⎿  5-hour limit reached ∙ resets 3pm
+
+╭──────────────────────────────────────────────────────────────────────╮
+│ >                                                                    │
+╰──────────────────────────────────────────────────────────────────────╯
+  ? for shortcuts
